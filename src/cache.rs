@@ -104,7 +104,7 @@ impl ProcCache {
     /// Insert or update cache entry by reading current `/proc`.
     ///
     /// Use this for snapshot/seed operations, not for event-driven updates.
-    pub fn update_from_proc(&self, pid: u32) {
+    pub(crate) fn update_from_proc(&self, pid: u32) {
         let cmd = read_proc_comm(pid).unwrap_or_else(|| "unknown".to_string());
         let (user, ppid, tgid) =
             read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
@@ -122,7 +122,7 @@ impl ProcCache {
     }
 
     /// Invalidate a cache entry (e.g. on process Exit).
-    pub fn invalidate(&self, pid: u32) {
+    pub(crate) fn invalidate(&self, pid: u32) {
         self.inner.invalidate(&pid);
     }
 
@@ -132,7 +132,7 @@ impl ProcCache {
     }
 
     /// Check if the cache is empty.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.inner.entry_count() == 0
     }
 
