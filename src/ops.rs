@@ -383,14 +383,42 @@ pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user:
 /// assert!(output.contains("cron"));
 /// ```
 pub fn display(tree: &impl TreeStore, root_pid: u32) -> String {
-    display_inner(tree, root_pid, true)
+    let cmd = tree
+        .get_node(root_pid)
+        .map(|n| n.cmd)
+        .filter(|c| !c.is_empty())
+        .or_else(|| crate::proc::read_proc_comm(root_pid))
+        .unwrap_or_else(|| "unknown".to_string());
+    let kids = children(tree, root_pid);
+    if kids.is_empty() {
+        return cmd;
+    }
+    // Root node: first child attaches with "─", rest with tree prefixes
+    let mut output = cmd;
+    for (i, &kid) in kids.iter().enumerate() {
+        let is_last = i == kids.len() - 1;
+        let prefix = if is_last { "└─" } else { "├─" };
+        let continuation = if is_last { "  " } else { "│ " };
+        let sub = display_subtree(tree, kid);
+        let lines: Vec<&str> = sub.lines().collect();
+        if i == 0 {
+            output.push_str(&format!("─{}", lines[0]));
+        } else {
+            output.push('\n');
+            output.push_str(prefix);
+            output.push_str(lines[0]);
+        }
+        for line in &lines[1..] {
+            output.push('\n');
+            output.push_str(continuation);
+            output.push_str(line);
+        }
+    }
+    output
 }
 
-/// Recursive display helper.
-///
-/// `is_root` controls whether the first child is attached with `"─"` (root
-/// case) or with the standard tree prefix (non-root case).
-fn display_inner(tree: &impl TreeStore, pid: u32, is_root: bool) -> String {
+/// Recursive helper for non-root subtrees.
+fn display_subtree(tree: &impl TreeStore, pid: u32) -> String {
     let cmd = tree
         .get_node(pid)
         .map(|n| n.cmd)
@@ -406,17 +434,11 @@ fn display_inner(tree: &impl TreeStore, pid: u32, is_root: bool) -> String {
         let is_last = i == kids.len() - 1;
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
-        let sub = display_inner(tree, kid, false);
+        let sub = display_subtree(tree, kid);
         let lines: Vec<&str> = sub.lines().collect();
-        if i == 0 && is_root {
-            output.push_str(&format!("─{}", lines[0]));
-        } else {
-            if i > 0 || is_root {
-                output.push('\n');
-            }
-            output.push_str(prefix);
-            output.push_str(lines[0]);
-        }
+        output.push('\n');
+        output.push_str(prefix);
+        output.push_str(lines[0]);
         for line in &lines[1..] {
             output.push('\n');
             output.push_str(continuation);
