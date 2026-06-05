@@ -327,7 +327,7 @@ pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user:
 }
 
 /// Render a pstree-style display starting from the given root PID.
-pub fn display(tree: &impl TreeStore, cache: &impl CacheStore, root_pid: u32) -> String {
+pub fn display(tree: &impl TreeStore, root_pid: u32) -> String {
     let cmd = tree
         .get_node(root_pid)
         .map(|n| n.cmd)
@@ -343,7 +343,7 @@ pub fn display(tree: &impl TreeStore, cache: &impl CacheStore, root_pid: u32) ->
         let is_last = i == kids.len() - 1;
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
-        let sub = display_inner(tree, cache, kid);
+        let sub = display_inner(tree, kid);
         let lines: Vec<&str> = sub.lines().collect();
         if i == 0 {
             output.push_str(&format!("─{}", lines[0]));
@@ -361,7 +361,7 @@ pub fn display(tree: &impl TreeStore, cache: &impl CacheStore, root_pid: u32) ->
     output
 }
 
-fn display_inner(tree: &impl TreeStore, cache: &impl CacheStore, pid: u32) -> String {
+fn display_inner(tree: &impl TreeStore, pid: u32) -> String {
     let cmd = tree
         .get_node(pid)
         .map(|n| n.cmd)
@@ -377,7 +377,7 @@ fn display_inner(tree: &impl TreeStore, cache: &impl CacheStore, pid: u32) -> St
         let is_last = i == kids.len() - 1;
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
-        let sub = display_inner(tree, cache, kid);
+        let sub = display_inner(tree, kid);
         let lines: Vec<&str> = sub.lines().collect();
         if i == 0 {
             output.push_str(&format!("─{}", lines[0]));
