@@ -1,0 +1,15 @@
+[package]
+name = "proc-tree"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Linux process tree: snapshot, incremental maintenance via fork/exec events, ancestry chain queries, PID reuse detection"
+repository = "https://github.com/lenitain/proc-tree"
+keywords = ["linux", "process", "tree", "proc", "pid"]
+categories = ["os", "command-line-utilities"]
+
+[dependencies]
+moka = { version = "0.12", features = ["sync"] }
+libc = "0.2"
+
+[dev-dependencies]
