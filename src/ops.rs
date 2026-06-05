@@ -383,12 +383,7 @@ pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user:
 /// assert!(output.contains("cron"));
 /// ```
 pub fn display(tree: &impl TreeStore, root_pid: u32) -> String {
-    let cmd = tree
-        .get_node(root_pid)
-        .map(|n| n.cmd)
-        .filter(|c| !c.is_empty())
-        .or_else(|| crate::proc::read_proc_comm(root_pid))
-        .unwrap_or_else(|| "unknown".to_string());
+    let cmd = get_cmd(tree, root_pid);
     let kids = children(tree, root_pid);
     if kids.is_empty() {
         return cmd;
@@ -419,12 +414,7 @@ pub fn display(tree: &impl TreeStore, root_pid: u32) -> String {
 
 /// Recursive helper for non-root subtrees.
 fn display_subtree(tree: &impl TreeStore, pid: u32) -> String {
-    let cmd = tree
-        .get_node(pid)
-        .map(|n| n.cmd)
-        .filter(|c| !c.is_empty())
-        .or_else(|| crate::proc::read_proc_comm(pid))
-        .unwrap_or_else(|| "unknown".to_string());
+    let cmd = get_cmd(tree, pid);
     let kids = children(tree, pid);
     if kids.is_empty() {
         return cmd;
@@ -446,6 +436,15 @@ fn display_subtree(tree: &impl TreeStore, pid: u32) -> String {
         }
     }
     output
+}
+
+/// Get command name for a PID, with fallback chain: tree -> /proc -> "unknown"
+fn get_cmd(tree: &impl TreeStore, pid: u32) -> String {
+    tree.get_node(pid)
+        .map(|n| n.cmd)
+        .filter(|c| !c.is_empty())
+        .or_else(|| crate::proc::read_proc_comm(pid))
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 /// Get the number of entries in the tree.
