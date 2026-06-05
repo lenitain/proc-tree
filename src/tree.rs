@@ -259,7 +259,7 @@ impl ProcTree {
             ProcEvent::Fork {
                 child_pid,
                 parent_pid,
-                timestamp_ns,
+                timestamp_ns: _,
             } => {
                 // Pre-populate tree: we know the parent but not cmd yet.
                 self.tree.insert(
