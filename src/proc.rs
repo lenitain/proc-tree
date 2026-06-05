@@ -127,6 +127,86 @@ pub fn read_proc_cmdline(pid: u32) -> Option<Vec<String>> {
     }
 }
 
+/// Memory size info from `/proc/{pid}/statm`.
+///
+/// All values are in **pages**. Use [`to_bytes`](Self::to_bytes) to convert
+/// to bytes using the system page size.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcStatm {
+    /// Total program size (pages).
+    pub size: u64,
+    /// Resident set size (pages).
+    pub resident: u64,
+    /// Shared pages (file-backed, e.g. shared libraries).
+    pub shared: u64,
+    /// Text (code) pages.
+    pub text: u64,
+    /// Library pages (unused on modern Linux).
+    pub lib: u64,
+    /// Data + stack pages.
+    pub data: u64,
+    /// Dirty pages (unused on modern Linux).
+    pub dt: u64,
+}
+
+impl ProcStatm {
+    /// Convert page-based values to bytes using the given page size.
+    pub fn to_bytes(&self, page_size: u64) -> ProcStatmBytes {
+        ProcStatmBytes {
+            size: self.size * page_size,
+            resident: self.resident * page_size,
+            shared: self.shared * page_size,
+            text: self.text * page_size,
+            lib: self.lib * page_size,
+            data: self.data * page_size,
+            dt: self.dt * page_size,
+        }
+    }
+}
+
+/// Memory size info in bytes (converted from pages).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcStatmBytes {
+    pub size: u64,
+    pub resident: u64,
+    pub shared: u64,
+    pub text: u64,
+    pub lib: u64,
+    pub data: u64,
+    pub dt: u64,
+}
+
+/// Get the system page size in bytes.
+pub fn page_size() -> u64 {
+    // SAFETY: sysconf(_SC_PAGESIZE) is a pure read-only query.
+    let ps = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if ps <= 0 { 4096 } else { ps as u64 }
+}
+
+/// Read memory info from `/proc/{pid}/statm`.
+///
+/// Returns page-based values. Use [`page_size`] and
+/// [`ProcStatm::to_bytes`] to convert to bytes.
+pub fn read_proc_statm(pid: u32) -> Option<ProcStatm> {
+    let content = std::fs::read_to_string(format!("/proc/{}/statm", pid)).ok()?;
+    let parts: Vec<u64> = content
+        .split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if parts.len() < 7 {
+        return None;
+    }
+    Some(ProcStatm {
+        size: parts[0],
+        resident: parts[1],
+        shared: parts[2],
+        text: parts[3],
+        lib: parts[4],
+        data: parts[5],
+        dt: parts[6],
+    })
+}
+
 /// Convert a UID to a username by looking up `/etc/passwd`.
 ///
 /// Results are cached after the first call. Returns `None` if the UID
@@ -212,5 +292,45 @@ mod tests {
         // Test binary name should be in the first arg
         assert!(args[0].contains("proc") || args[0].contains("deps"),
             "expected test binary name, got: {}", args[0]);
+    }
+
+    // ---- read_proc_statm + page_size ----
+
+    #[test]
+    fn test_page_size() {
+        let ps = page_size();
+        assert!(ps > 0, "page size should be > 0");
+        assert!(ps.is_power_of_two(), "page size should be a power of 2, got {ps}");
+    }
+
+    #[test]
+    fn test_read_proc_statm_pid1() {
+        let statm = read_proc_statm(1);
+        assert!(statm.is_some(), "PID 1 should have statm");
+        let s = statm.unwrap();
+        assert!(s.resident > 0, "PID 1 should have resident pages > 0");
+        assert!(s.size >= s.resident, "size should be >= resident");
+    }
+
+    #[test]
+    fn test_read_proc_statm_nonexistent() {
+        assert!(read_proc_statm(0x7FFFFFFF).is_none());
+    }
+
+    #[test]
+    fn test_statm_to_bytes() {
+        let statm = ProcStatm {
+            size: 100,
+            resident: 50,
+            shared: 20,
+            text: 10,
+            lib: 0,
+            data: 30,
+            dt: 0,
+        };
+        let bytes = statm.to_bytes(4096);
+        assert_eq!(bytes.size, 100 * 4096);
+        assert_eq!(bytes.resident, 50 * 4096);
+        assert_eq!(bytes.shared, 20 * 4096);
     }
 }
