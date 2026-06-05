@@ -107,7 +107,7 @@ pub fn snapshot(tree: &impl TreeStore, cache: &impl CacheStore) {
 /// Resolve a PID to its process info.
 ///
 /// Checks the cache first, then falls back to reading `/proc` directly.
-pub fn resolve(_tree: &impl TreeStore, cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
+pub fn resolve(cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
     // Try cache first
     if let Some(info) = cache.get_info(pid) {
         return Some(info);
@@ -298,7 +298,7 @@ pub fn siblings(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
 }
 
 /// Find all PIDs whose cmd matches the given string.
-pub fn find_by_cmd(tree: &impl TreeStore, _cache: &impl CacheStore, target_cmd: &str) -> Vec<u32> {
+pub fn find_by_cmd(tree: &impl TreeStore, target_cmd: &str) -> Vec<u32> {
     tree.all_pids()
         .into_iter()
         .filter(|&pid| {
