@@ -9,6 +9,12 @@ pub struct TestTree {
     inner: Mutex<HashMap<u32, PidNode>>,
 }
 
+impl Default for TestTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestTree {
     pub fn new() -> Self {
         Self {
@@ -34,6 +40,12 @@ impl TreeStore for TestTree {
 /// Simple HashMap-based cache store for testing.
 pub struct TestCache {
     inner: Mutex<HashMap<u32, ProcInfo>>,
+}
+
+impl Default for TestCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TestCache {
