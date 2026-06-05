@@ -13,7 +13,6 @@ use std::fmt;
 use std::sync::Mutex;
 use std::time::Duration;
 
-
 use crate::cache::{ProcCache, ProcInfo};
 use crate::proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields};
 
@@ -307,8 +306,8 @@ impl ProcTree {
             }
             ProcEvent::Exec { pid, timestamp_ns } => {
                 let cmd = read_proc_comm(*pid).unwrap_or_else(|| "unknown".to_string());
-                let (_user, ppid, _tgid) = read_proc_status_fields(*pid)
-                    .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+                let (_user, ppid, _tgid) =
+                    read_proc_status_fields(*pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
                 // Update tree
                 self.tree.lock().unwrap().insert(
                     *pid,
@@ -400,8 +399,7 @@ impl ProcTree {
                 // Fallback: read from /proc
                 match read_proc_status_fields(current) {
                     Some((_, p, _)) => {
-                        let c = read_proc_comm(current)
-                            .unwrap_or_else(|| "unknown".to_string());
+                        let c = read_proc_comm(current).unwrap_or_else(|| "unknown".to_string());
                         (p, c)
                     }
                     None => {
