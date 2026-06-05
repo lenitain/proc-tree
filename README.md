@@ -112,14 +112,6 @@ src/
 └── tree.rs   — ProcTree, ProcEvent, ProcessLink, builder
 ```
 
-## Dependencies
-
-| Crate | Purpose |
-|-------|---------|
-| `libc` | `sysconf(_SC_CLK_TCK)` for jiffies → nanoseconds |
-| `compact_str` | Short string optimization (<23 bytes on stack) |
-| `arrayvec` | Stack-allocated path formatting |
-
 ## License
 
 [MIT License](./LICENSE)
