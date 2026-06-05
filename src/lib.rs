@@ -64,7 +64,7 @@ pub mod tree;
 
 // Re-export main types at crate root for convenience.
 pub use cache::{ProcCache, ProcInfo};
-pub use proc::{ProcNamespaces, ProcStatm, ProcStatmBytes, page_size, read_proc_cgroup, read_proc_cmdline, read_proc_comm, read_proc_namespaces, read_proc_start_time_ns, read_proc_statm, read_proc_status_fields, uid_to_username};
+pub use proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields, uid_to_username};
 pub use tree::{PidNode, ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
