@@ -7,7 +7,6 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use arrayvec::ArrayString;
-use compact_str::CompactString;
 
 /// Clock ticks per second (POSIX `sysconf(_SC_CLK_TCK)`).
 ///
@@ -24,15 +23,14 @@ fn clock_ticks_per_sec() -> i64 {
 /// Read the command name for a PID from `/proc/{pid}/comm`.
 ///
 /// Returns `None` if the process doesn't exist or the file can't be read.
-/// Uses [`CompactString`] to avoid heap allocation for short process names.
-pub fn read_proc_comm(pid: u32) -> Option<CompactString> {
+pub fn read_proc_comm(pid: u32) -> Option<String> {
     let path = proc_path(pid, "comm");
     let mut buf = [0u8; 64];
     let mut file = std::fs::File::open(path.as_str()).ok()?;
     use std::io::Read;
     let n = file.read(&mut buf).ok()?;
     let s = std::str::from_utf8(&buf[..n]).ok()?;
-    Some(CompactString::new(s.trim()))
+    Some(s.trim().to_string())
 }
 
 /// Format `/proc/{pid}/{suffix}` into a stack-allocated string.
@@ -46,17 +44,16 @@ fn proc_path(pid: u32, suffix: &str) -> ArrayString<32> {
 /// Read user, ppid, tgid from `/proc/{pid}/status` in one pass.
 ///
 /// Returns `None` if the process doesn't exist or parsing fails.
-/// Uses [`CompactString`] for the username to avoid heap allocation.
-pub fn read_proc_status_fields(pid: u32) -> Option<(CompactString, u32, u32)> {
+pub fn read_proc_status_fields(pid: u32) -> Option<(String, u32, u32)> {
     let path = proc_path(pid, "status");
     let status = std::fs::read_to_string(path.as_str()).ok()?;
-    let mut user = CompactString::new("");
+    let mut user = String::new();
     let mut ppid = 0u32;
     let mut tgid = 0u32;
     for line in status.lines() {
         if let Some(val) = line.strip_prefix("Uid:") {
             let uid: u32 = val.split_whitespace().next()?.parse().ok()?;
-            user = uid_to_username(uid).unwrap_or_else(|| CompactString::new("unknown"));
+            user = uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
         } else if let Some(val) = line.strip_prefix("PPid:") {
             ppid = val.trim().parse().ok()?;
         } else if let Some(val) = line.strip_prefix("Tgid:") {
@@ -106,8 +103,8 @@ pub fn read_proc_start_time_ns(pid: u32) -> u64 {
 
 // ---- UID → username lookup ----
 
-fn uid_passwd_map() -> &'static HashMap<u32, CompactString> {
-    static MAP: OnceLock<HashMap<u32, CompactString>> = OnceLock::new();
+fn uid_passwd_map() -> &'static HashMap<u32, String> {
+    static MAP: OnceLock<HashMap<u32, String>> = OnceLock::new();
     MAP.get_or_init(|| {
         let mut map = HashMap::new();
         if let Ok(passwd) = std::fs::read_to_string("/etc/passwd") {
@@ -119,7 +116,7 @@ fn uid_passwd_map() -> &'static HashMap<u32, CompactString> {
                 if let (Some(name), Some(uid_str)) = (name, uid_str)
                     && let Ok(uid) = uid_str.parse::<u32>()
                 {
-                    map.insert(uid, CompactString::new(name));
+                    map.insert(uid, name.to_string());
                 }
             }
         }
@@ -131,8 +128,7 @@ fn uid_passwd_map() -> &'static HashMap<u32, CompactString> {
 ///
 /// Results are cached after the first call. Returns `None` if the UID
 /// is not found in `/etc/passwd`.
-/// Uses [`CompactString`] to avoid heap allocation for short usernames.
-pub fn uid_to_username(uid: u32) -> Option<CompactString> {
+pub fn uid_to_username(uid: u32) -> Option<String> {
     uid_passwd_map().get(&uid).cloned()
 }
 
