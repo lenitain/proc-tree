@@ -1,6 +1,6 @@
 # proc-tree
 
-[![Crates.io](https://img.shields.io/crates/v/proc-tree.svg)](https://crates.io/crates/proc-tree)
+[![Crates.io](https://img.shields.io/crates/v/proc-tree.svg)](https://docs.rs/proc-tree)
 [![Docs.rs](https://docs.rs/proc-tree/badge.svg)](https://docs.rs/proc-tree)
 
 Linux **process tree** — snapshot, incremental maintenance via fork/exec/exit events, ancestry chain queries, and PID reuse detection.
@@ -19,79 +19,49 @@ Minimum supported Rust version: **1.85** (edition 2024).
 - **Incremental updates**: fork/exec/exit events for live maintenance
 - **Ancestry queries**: build process chain, check descendants, find siblings
 - **PID reuse detection**: via `start_time_ns` comparison
-- **Trait-based storage**: implement `TreeStore` and `CacheStore` for your own backend
+- **Pluggable storage**: implement `TreeStore` / `CacheStore` for any backend
+- **Ready-to-use defaults**: `DefaultTree` / `DefaultCache` (HashMap + Mutex + TTL)
 - **Zero heap allocation** for `/proc` path formatting (`ArrayString`)
-- **Thread-safe**: traits accept `&self` for interior mutability
 
-## Testing
-
-```bash
-cargo test
-```
-
-65 tests (13 unit + 50 integration + 2 doc-tests) covering snapshot, chain building, descendant checks, display formatting, edge cases (cycles, nonexistent PIDs, concurrent access).
-
-## Quick example
+## Quick start
 
 ```rust
-use proc_tree::{TreeStore, CacheStore, PidNode, ProcInfo, ProcEvent};
-use proc_tree::{snapshot, resolve, handle_events, build_chain_string, display};
-use std::collections::HashMap;
-use std::sync::Mutex;
+use proc_tree::{DefaultTree, DefaultCache, snapshot, resolve, build_chain_string};
 
-// Provide your own storage implementation
-struct MyTree(Mutex<HashMap<u32, PidNode>>);
-struct MyCache(Mutex<HashMap<u32, ProcInfo>>);
+let tree = DefaultTree::new(65536, 600);  // capacity, TTL seconds
+let cache = DefaultCache::new(65536, 600);
+
+// Seed from /proc
+snapshot(&tree, &cache);
+
+// Resolve a PID
+if let Some(info) = resolve(&cache, 1) {
+    println!("PID 1: cmd={}, user={}", info.cmd, info.user);
+}
+
+// Build ancestry chain
+let chain = build_chain_string(&tree, &cache, std::process::id());
+```
+
+## Custom backend
+
+Implement the traits for any storage (Redis, moka, dashmap, etc.):
+
+```rust
+use proc_tree::{TreeStore, CacheStore, PidNode, ProcInfo, handle_events, ProcEvent};
+
+struct MyTree(/* your storage */);
+struct MyCache(/* your storage */);
 
 impl TreeStore for MyTree {
-    fn get_node(&self, pid: u32) -> Option<PidNode> {
-        self.0.lock().unwrap().get(&pid).cloned()
-    }
-    fn insert_node(&self, pid: u32, node: PidNode) {
-        self.0.lock().unwrap().insert(pid, node);
-    }
-    fn all_pids(&self) -> Vec<u32> {
-        self.0.lock().unwrap().keys().copied().collect()
-    }
+    fn get_node(&self, pid: u32) -> Option<PidNode> { todo!() }
+    fn insert_node(&self, pid: u32, node: PidNode) { todo!() }
+    fn all_pids(&self) -> Vec<u32> { todo!() }
 }
 
 impl CacheStore for MyCache {
-    fn get_info(&self, pid: u32) -> Option<ProcInfo> {
-        self.0.lock().unwrap().get(&pid).cloned()
-    }
-    fn insert_info(&self, pid: u32, info: ProcInfo) {
-        self.0.lock().unwrap().insert(pid, info);
-    }
-}
-
-fn main() {
-    let tree = MyTree(Mutex::new(HashMap::new()));
-    let cache = MyCache(Mutex::new(HashMap::new()));
-
-    // Seed from /proc
-    snapshot(&tree, &cache);
-
-    // Resolve a PID
-    if let Some(info) = resolve(&cache, 1) {
-        println!("PID 1: cmd={}, user={}", info.cmd, info.user);
-    }
-
-    // Build ancestry chain
-    let chain = build_chain_string(&tree, &cache, std::process::id());
-    println!("Chain: {}", chain);
-
-    // Check descendant
-    let info = resolve(&cache, 1).unwrap();
-    assert!(proc_tree::is_descendant(&tree, std::process::id(), &info.cmd));
-
-    // Handle events
-    handle_events(&tree, &cache, &[
-        ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
-        ProcEvent::Exec { pid: 200, timestamp_ns: 1 },
-    ]);
-
-    // Display as pstree
-    println!("{}", display(&tree, 1));
+    fn get_info(&self, pid: u32) -> Option<ProcInfo> { todo!() }
+    fn insert_info(&self, pid: u32, info: ProcInfo) { todo!() }
 }
 ```
 
@@ -103,6 +73,13 @@ fn main() {
 |-------|-------------|
 | `TreeStore` | Process tree storage (parent→child relationships) |
 | `CacheStore` | Process info cache (PID→metadata mapping) |
+
+### Default implementations
+
+| Type | Description |
+|------|-------------|
+| `DefaultTree` | `HashMap<Mutex>` with TTL, `Clone` shares data via `Arc` |
+| `DefaultCache` | Same as above, for `ProcInfo` |
 
 ### Functions
 
@@ -122,16 +99,23 @@ fn main() {
 | `handle_events(tree, cache, events)` | Process batch of fork/exec/exit events |
 | `tree_len(tree)` | Get number of entries in tree |
 
+### Low-level `/proc` access
+
+| Function | Description |
+|----------|-------------|
+| `read_proc_comm(pid)` | Read `/proc/{pid}/comm` |
+| `read_proc_status_fields(pid)` | Read user, ppid, tgid from `/proc/{pid}/status` |
+| `read_proc_start_time_ns(pid)` | Read start time from `/proc/{pid}/stat` |
+| `uid_to_username(uid)` | UID→username via `/etc/passwd` |
+
 ### Types
 
 ```rust
-// Tree node
 pub struct PidNode {
     pub ppid: u32,
     pub cmd: String,
 }
 
-// Cached process info
 pub struct ProcInfo {
     pub cmd: String,
     pub user: String,
@@ -140,14 +124,12 @@ pub struct ProcInfo {
     pub start_time_ns: u64,
 }
 
-// Chain element
 pub struct ProcessLink {
     pub pid: u32,
     pub cmd: String,
     pub user: String,
 }
 
-// Process event
 pub enum ProcEvent {
     Fork { child_pid: u32, parent_pid: u32, timestamp_ns: u64 },
     Exec { pid: u32, timestamp_ns: u64 },
@@ -155,15 +137,24 @@ pub enum ProcEvent {
 }
 ```
 
+## Testing
+
+```bash
+cargo test
+```
+
+70 tests covering snapshot, chain building, descendant checks, display formatting, edge cases (cycles, nonexistent PIDs, concurrent access).
+
 ## Modules
 
 ```
 src/
-├── lib.rs    — Crate root, re-exports
-├── proc.rs   — Raw /proc reading (comm, status, stat, uid lookup)
-├── cache.rs  — PID → ProcInfo cache with TTL and PID reuse detection
-├── traits.rs — TreeStore, CacheStore traits and algorithm functions
-└── tree.rs   — ProcEvent, ProcessLink types
+├── lib.rs            — Re-exports
+├── proc.rs           — Raw /proc reading (pub)
+├── cache.rs          — ProcInfo type
+├── traits.rs         — TreeStore, CacheStore traits + algorithm functions
+├── tree.rs           — ProcEvent, ProcessLink types
+└── default_store.rs  — DefaultTree, DefaultCache implementations
 ```
 
 ## License

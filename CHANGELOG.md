@@ -9,19 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Core types**: `ProcTree`, `ProcTreeBuilder`, `ProcEvent`, `ProcessLink`, `ProcInfo`
-- **Snapshot**: one-shot `/proc` scan via `snapshot()`
+- **Trait-based storage**: `TreeStore` and `CacheStore` traits for pluggable backends
+- **Default implementations**: `DefaultTree` and `DefaultCache` backed by `HashMap<Mutex>` with TTL
+- **Snapshot**: one-shot `/proc` scan via `snapshot()` to seed tree and cache
 - **Incremental updates**: `handle_event()` / `handle_events()` for fork/exec/exit events
-- **Ancestry queries**: `build_chain()`, `build_chain_string()`, `is_descendant()`
+- **Ancestry queries**: `build_chain_links()`, `build_chain_string()`, `is_descendant()`
 - **Tree queries**: `children()`, `descendants()`, `siblings()`
 - **Search**: `find_by_cmd()`, `find_by_user()`
 - **Display**: `display()` for pstree-style output
-- **PID reuse detection**: via `start_time_ns` comparison in cache
-- **Cache**: TTL-based `ProcCache` with capacity eviction
-- **Short string optimization**: `CompactString` for cmd/user fields
-- **Stack path formatting**: `ArrayString` for `/proc/{pid}/...` paths
-- **Thread safety**: all operations protected by `Mutex`
-- **Builder pattern**: configurable tree/cache capacity and TTL
-- **Test suite**: 95 tests (26 unit + 59 integration + 10 doc-tests)
+- **PID reuse detection**: via `start_time_ns` comparison in `resolve()`
+- **Public `proc` module**: `read_proc_comm()`, `read_proc_status_fields()`, `uid_to_username()`, `read_proc_start_time_ns()` for direct `/proc` access
+- **Zero heap allocation** for `/proc` path formatting (`ArrayString`)
+- **Thread safety**: trait methods accept `&self` for interior mutability
+- **Test suite**: 70 tests (15 unit + 48 integration + 7 doc-tests)
 - **Documentation**: README, doc-tests for all public APIs
-- GitHub Actions CI workflow (build + test + fmt + clippy)
