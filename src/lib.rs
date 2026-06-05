@@ -6,56 +6,55 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use proc_tree::ProcTree;
+//! use proc_tree::{TreeStore, CacheStore, PidNode, ProcInfo, ProcEvent};
+//! use proc_tree::{snapshot, resolve, handle_events, build_chain_string};
+//!
+//! // Implement your own storage (or use a provided example)
+//! # struct MyTree;
+//! # impl TreeStore for MyTree {
+//! #     fn get_node(&self, pid: u32) -> Option<PidNode> { None }
+//! #     fn insert_node(&self, pid: u32, node: PidNode) {}
+//! #     fn all_pids(&self) -> Vec<u32> { vec![] }
+//! # }
+//! # struct MyCache;
+//! # impl CacheStore for MyCache {
+//! #     fn get_info(&self, pid: u32) -> Option<ProcInfo> { None }
+//! #     fn insert_info(&self, pid: u32, info: ProcInfo) {}
+//! # }
+//!
+//! let tree = MyTree;
+//! let cache = MyCache;
 //!
 //! // Seed from /proc
-//! let mut tree = ProcTree::builder().build();
-//! tree.snapshot();
+//! snapshot(&tree, &cache);
 //!
 //! // Resolve a PID
-//! if let Some(info) = tree.resolve(1) {
+//! if let Some(info) = resolve(&cache, 1) {
 //!     println!("PID 1: cmd={}, user={}", info.cmd, info.user);
 //! }
 //!
 //! // Build ancestry chain
-//! let chain = tree.build_chain(1234);
-//! for link in &chain {
-//!     println!("  {}", link); // "1234|touch|root"
-//! }
+//! let s = build_chain_string(&tree, &cache, 1234);
+//! println!("Chain: {}", s);
 //!
-//! // Check descendant
-//! if tree.is_descendant(1234, "nginx") {
-//!     println!("PID 1234 is a descendant of nginx");
-//! }
+//! // Handle events
+//! handle_events(&tree, &cache, &[
+//!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
+//! ]);
 //! ```
 //!
 //! ## PID Reuse Detection
 //!
 //! When a process exits and its PID is reused by a new process, cached data
-//! becomes stale. `ProcCache::get()` and `ProcTree::resolve()` automatically
-//! detect this by comparing `start_time_ns` with the current `/proc` value.
-//!
-//! ## Event-Driven Updates
-//!
-//! ```rust
-//! use proc_tree::{ProcTree, ProcEvent};
-//!
-//! let mut tree = ProcTree::builder().build();
-//! tree.snapshot();
-//!
-//! // In your event loop:
-//! tree.handle_events(&[
-//!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
-//!     ProcEvent::Exec { pid: 200, timestamp_ns: 1 },
-//! ]);
-//! ```
+//! becomes stale. `CacheStore` implementations should compare `start_time_ns`
+//! with the current `/proc` value to detect reuse.
 
 mod cache;
 mod proc;
 mod traits;
 mod tree;
 
-// Public API
+// Public API — traits and types
 pub use cache::ProcInfo;
 pub use proc::read_proc_start_time_ns;
 pub use traits::{
@@ -63,35 +62,4 @@ pub use traits::{
     display, find_by_cmd, find_by_user, handle_event, handle_events, is_descendant, resolve,
     siblings, snapshot, tree_len,
 };
-pub use tree::{ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Integration test: snapshot → resolve → chain → is_descendant
-    #[test]
-    fn test_full_workflow() {
-        let mut tree = ProcTree::builder().build();
-        tree.snapshot();
-
-        let info = tree.resolve(1).expect("PID 1 should exist");
-        assert!(!info.cmd.is_empty());
-
-        let chain = tree.build_chain(1);
-        assert!(!chain.is_empty());
-        assert_eq!(chain.last().unwrap().pid, 1);
-
-        let s = tree.build_chain_string(1);
-        assert!(s.contains("1|"));
-    }
-
-    /// Test that resolve works standalone
-    #[test]
-    fn test_standalone_resolve() {
-        let mut tree = ProcTree::builder().build();
-        tree.snapshot();
-        let info = tree.resolve(1).expect("PID 1 should be resolvable");
-        assert_eq!(info.ppid, 0);
-    }
-}
+pub use tree::{ProcEvent, ProcessLink};
