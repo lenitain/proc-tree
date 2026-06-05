@@ -42,10 +42,7 @@ pub enum ProcEvent {
         timestamp_ns: u64,
     },
     /// A process executed a new program. Its cmd/user may have changed.
-    Exec {
-        pid: u32,
-        timestamp_ns: u64,
-    },
+    Exec { pid: u32, timestamp_ns: u64 },
     /// A process exited. The node is preserved for historical chain lookups.
     Exit { pid: u32 },
 }
@@ -279,8 +276,8 @@ impl ProcTree {
             }
             ProcEvent::Exec { pid, timestamp_ns } => {
                 let cmd = read_proc_comm(*pid).unwrap_or_else(|| "unknown".to_string());
-                let (_user, ppid, _tgid) = read_proc_status_fields(*pid)
-                    .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+                let (_user, ppid, _tgid) =
+                    read_proc_status_fields(*pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
                 // Update tree
                 self.tree.insert(
                     *pid,
@@ -370,9 +367,7 @@ impl ProcTree {
                 .cache
                 .get_unchecked(current)
                 .map(|info| info.user)
-                .or_else(|| {
-                    read_proc_status_fields(current).map(|(u, _, _)| u)
-                })
+                .or_else(|| read_proc_status_fields(current).map(|(u, _, _)| u))
                 .unwrap_or_else(|| "unknown".to_string());
 
             parts.push(ProcessLink {
@@ -625,7 +620,6 @@ impl ProcTree {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,7 +628,10 @@ mod tests {
     fn test_snapshot_pid1() {
         let mut tree = ProcTree::builder().build();
         tree.snapshot();
-        assert!(tree.tree_len() > 0, "tree should have entries after snapshot");
+        assert!(
+            tree.tree_len() > 0,
+            "tree should have entries after snapshot"
+        );
         // PID 1 always exists on Linux
         let info = tree.resolve(1);
         assert!(info.is_some(), "PID 1 should be resolvable");
@@ -831,10 +828,38 @@ mod tests {
     fn test_siblings() {
         // Use high PIDs unlikely to exist on the system
         let tree = ProcTree::builder().build();
-        tree.tree.insert(500000, PidNode { ppid: 0, cmd: "init".into(), start_time_ns: 0 });
-        tree.tree.insert(500001, PidNode { ppid: 500000, cmd: "a".into(), start_time_ns: 0 });
-        tree.tree.insert(500002, PidNode { ppid: 500000, cmd: "b".into(), start_time_ns: 0 });
-        tree.tree.insert(500003, PidNode { ppid: 500000, cmd: "c".into(), start_time_ns: 0 });
+        tree.tree.insert(
+            500000,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+                start_time_ns: 0,
+            },
+        );
+        tree.tree.insert(
+            500001,
+            PidNode {
+                ppid: 500000,
+                cmd: "a".into(),
+                start_time_ns: 0,
+            },
+        );
+        tree.tree.insert(
+            500002,
+            PidNode {
+                ppid: 500000,
+                cmd: "b".into(),
+                start_time_ns: 0,
+            },
+        );
+        tree.tree.insert(
+            500003,
+            PidNode {
+                ppid: 500000,
+                cmd: "c".into(),
+                start_time_ns: 0,
+            },
+        );
         // children() scans /proc — these high PIDs won't exist, so use
         // the tree-only path by testing siblings of a real PID instead.
         // Instead, verify the ppid lookup logic works.
@@ -855,12 +880,36 @@ mod tests {
     #[test]
     fn test_tree_display() {
         let tree = ProcTree::builder().build();
-        tree.tree.insert(1, PidNode { ppid: 0, cmd: "init".into(), start_time_ns: 0 });
-        tree.tree.insert(100, PidNode { ppid: 1, cmd: "bash".into(), start_time_ns: 0 });
-        tree.tree.insert(101, PidNode { ppid: 1, cmd: "nginx".into(), start_time_ns: 0 });
+        tree.tree.insert(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+                start_time_ns: 0,
+            },
+        );
+        tree.tree.insert(
+            100,
+            PidNode {
+                ppid: 1,
+                cmd: "bash".into(),
+                start_time_ns: 0,
+            },
+        );
+        tree.tree.insert(
+            101,
+            PidNode {
+                ppid: 1,
+                cmd: "nginx".into(),
+                start_time_ns: 0,
+            },
+        );
         let display = tree.tree_display(1);
         assert!(display.contains("init"), "should contain root cmd");
-        assert!(display.contains("bash") || display.contains("nginx"),
-            "should contain child cmds, got: {}", display);
+        assert!(
+            display.contains("bash") || display.contains("nginx"),
+            "should contain child cmds, got: {}",
+            display
+        );
     }
 }

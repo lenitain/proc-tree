@@ -194,9 +194,15 @@ mod tests {
         let cache = ProcCache::new(1024, Duration::from_secs(60));
         // moka entry_count() lags behind inserts due to internal write buffer.
         // Verify emptiness via get_unchecked which is immediately consistent.
-        assert!(cache.get_unchecked(1).is_none(), "should be empty initially");
+        assert!(
+            cache.get_unchecked(1).is_none(),
+            "should be empty initially"
+        );
         cache.update_from_proc(1);
-        assert!(cache.get_unchecked(1).is_some(), "entry should be retrievable");
+        assert!(
+            cache.get_unchecked(1).is_some(),
+            "entry should be retrievable"
+        );
     }
 
     #[test]
@@ -204,6 +210,9 @@ mod tests {
         let cache1 = ProcCache::new(1024, Duration::from_secs(60));
         let cache2 = cache1.clone();
         cache1.update_from_proc(1);
-        assert!(cache2.get_unchecked(1).is_some(), "clone should share state");
+        assert!(
+            cache2.get_unchecked(1).is_some(),
+            "clone should share state"
+        );
     }
 }
