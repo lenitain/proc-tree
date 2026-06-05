@@ -183,6 +183,69 @@ pub fn page_size() -> u64 {
     if ps <= 0 { 4096 } else { ps as u64 }
 }
 
+/// Read cgroup info from `/proc/{pid}/cgroup`.
+///
+/// Returns the cgroup path string. On non-containerized systems, this is
+/// typically "/". On containerized systems, it contains the container path.
+pub fn read_proc_cgroup(pid: u32) -> Option<String> {
+    let content = std::fs::read_to_string(format!("/proc/{}/cgroup", pid)).ok()?;
+    // cgroup v2 format: "0::/path"
+    // cgroup v1 format: "hierarchy:id:controllers:path"
+    for line in content.lines() {
+        if let Some(path) = line.strip_prefix("0::") {
+            // cgroup v2
+            return Some(path.to_string());
+        }
+        // cgroup v1: take the last field (path)
+        if let Some(path) = line.rsplit(':').next() {
+            if !path.is_empty() {
+                return Some(path.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Read namespace info from `/proc/{pid}/ns/*`.
+///
+/// Returns device/inode pairs for each namespace type.
+pub fn read_proc_namespaces(pid: u32) -> Option<ProcNamespaces> {
+    let ns_dir = format!("/proc/{}/ns", pid);
+    // Check if the ns directory exists
+    if !std::path::Path::new(&ns_dir).is_dir() {
+        return None;
+    }
+    let read_ns = |name: &str| -> Option<u64> {
+        let path = format!("{}/{}", ns_dir, name);
+        let link = std::fs::read_link(&path).ok()?;
+        // Link target format: "type:[inode]"
+        let s = link.to_string_lossy();
+        let inode_str = s.split('[').nth(1)?.trim_end_matches(']');
+        inode_str.parse().ok()
+    };
+    Some(ProcNamespaces {
+        pid: read_ns("pid"),
+        net: read_ns("net"),
+        mnt: read_ns("mnt"),
+        user: read_ns("user"),
+        uts: read_ns("uts"),
+        ipc: read_ns("ipc"),
+        cgroup: read_ns("cgroup"),
+    })
+}
+
+/// Namespace inode info for a process.
+#[derive(Debug, Clone, Default)]
+pub struct ProcNamespaces {
+    pub pid: Option<u64>,
+    pub net: Option<u64>,
+    pub mnt: Option<u64>,
+    pub user: Option<u64>,
+    pub uts: Option<u64>,
+    pub ipc: Option<u64>,
+    pub cgroup: Option<u64>,
+}
+
 /// Read memory info from `/proc/{pid}/statm`.
 ///
 /// Returns page-based values. Use [`page_size`] and
@@ -332,5 +395,41 @@ mod tests {
         assert_eq!(bytes.size, 100 * 4096);
         assert_eq!(bytes.resident, 50 * 4096);
         assert_eq!(bytes.shared, 20 * 4096);
+    }
+
+    // ---- read_proc_cgroup ----
+
+    #[test]
+    fn test_read_proc_cgroup_pid1() {
+        let cgroup = read_proc_cgroup(1);
+        assert!(cgroup.is_some(), "PID 1 should have a cgroup");
+        let cg = cgroup.unwrap();
+        // On non-containerized systems, cgroup is typically "/"
+        assert!(cg.starts_with('/') || cg.is_empty(),
+            "cgroup path should start with / or be empty, got: {}", cg);
+    }
+
+    #[test]
+    fn test_read_proc_cgroup_nonexistent() {
+        assert!(read_proc_cgroup(0x7FFFFFFF).is_none());
+    }
+
+    // ---- read_proc_namespaces ----
+
+    #[test]
+    fn test_read_proc_namespaces_self() {
+        let pid = std::process::id();
+        let ns = read_proc_namespaces(pid);
+        // May be None if /proc/{pid}/ns is not accessible (e.g. restricted container)
+        if let Some(ns) = ns {
+            // At least pid namespace should be readable on most systems
+            assert!(ns.pid.is_some() || ns.net.is_some(),
+                "at least one namespace should be readable");
+        }
+    }
+
+    #[test]
+    fn test_read_proc_namespaces_nonexistent() {
+        assert!(read_proc_namespaces(0x7FFFFFFF).is_none());
     }
 }
