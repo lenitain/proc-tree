@@ -108,6 +108,25 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
     })
 }
 
+/// Read the full command line for a PID from `/proc/{pid}/cmdline`.
+///
+/// The cmdline file contains NUL-separated arguments. Returns a `Vec<String>`
+/// of the command and its arguments, with empty strings filtered out.
+/// Returns `None` if the process doesn't exist or the file can't be read.
+pub fn read_proc_cmdline(pid: u32) -> Option<Vec<String>> {
+    let bytes = std::fs::read(format!("/proc/{}/cmdline", pid)).ok()?;
+    let args: Vec<String> = bytes
+        .split(|&b| b == 0)
+        .filter(|s| !s.is_empty())
+        .map(|s| String::from_utf8_lossy(s).into_owned())
+        .collect();
+    if args.is_empty() {
+        None
+    } else {
+        Some(args)
+    }
+}
+
 /// Convert a UID to a username by looking up `/etc/passwd`.
 ///
 /// Results are cached after the first call. Returns `None` if the UID
@@ -164,5 +183,34 @@ mod tests {
     fn test_uid_to_username_nonexistent() {
         // UID 0xFFFFFFFF almost certainly doesn't exist
         assert!(uid_to_username(0xFFFFFFFF).is_none());
+    }
+
+    // ---- read_proc_cmdline ----
+
+    #[test]
+    fn test_read_proc_cmdline_pid1() {
+        let cmdline = read_proc_cmdline(1);
+        assert!(cmdline.is_some(), "PID 1 should have a cmdline");
+        let args = cmdline.unwrap();
+        assert!(!args.is_empty(), "cmdline should have at least one arg");
+        // PID 1's first arg is typically the init system (systemd, init, etc.)
+        assert!(!args[0].is_empty());
+    }
+
+    #[test]
+    fn test_read_proc_cmdline_nonexistent() {
+        assert!(read_proc_cmdline(0x7FFFFFFF).is_none());
+    }
+
+    #[test]
+    fn test_read_proc_cmdline_self() {
+        // Current process should have a cmdline
+        let pid = std::process::id();
+        let cmdline = read_proc_cmdline(pid);
+        assert!(cmdline.is_some());
+        let args = cmdline.unwrap();
+        // Test binary name should be in the first arg
+        assert!(args[0].contains("proc") || args[0].contains("deps"),
+            "expected test binary name, got: {}", args[0]);
     }
 }
