@@ -189,7 +189,13 @@ mod tests {
     #[test]
     fn default_tree_insert_get() {
         let tree = DefaultTree::new(100, 0);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         let node = tree.get_node(1).unwrap();
         assert_eq!(node.ppid, 0);
         assert_eq!(node.cmd, "init");
@@ -198,12 +204,24 @@ mod tests {
     #[test]
     fn default_tree_ttl_expired() {
         let tree = DefaultTree::new(100, 0); // ttl=0 means no expiry
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         assert!(tree.get_node(1).is_some());
 
         // With ttl=1, entry expires after 1 second
         let tree = DefaultTree::new(100, 1);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         assert!(tree.get_node(1).is_some());
         std::thread::sleep(Duration::from_millis(1100));
         assert!(tree.get_node(1).is_none());
@@ -212,13 +230,16 @@ mod tests {
     #[test]
     fn default_cache_insert_get() {
         let cache = DefaultCache::new(100, 0);
-        cache.insert_info(42, ProcInfo {
-            cmd: "bash".into(),
-            user: "root".into(),
-            ppid: 1,
-            tgid: 42,
-            start_time_ns: 0,
-        });
+        cache.insert_info(
+            42,
+            ProcInfo {
+                cmd: "bash".into(),
+                user: "root".into(),
+                ppid: 1,
+                tgid: 42,
+                start_time_ns: 0,
+            },
+        );
         let info = cache.get_info(42).unwrap();
         assert_eq!(info.cmd, "bash");
         assert_eq!(info.ppid, 1);
@@ -227,10 +248,22 @@ mod tests {
     #[test]
     fn clone_shares_data() {
         let tree = DefaultTree::new(100, 0);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         let tree2 = tree.clone();
         assert!(tree2.get_node(1).is_some());
-        tree2.insert_node(2, PidNode { ppid: 1, cmd: "bash".into() });
+        tree2.insert_node(
+            2,
+            PidNode {
+                ppid: 1,
+                cmd: "bash".into(),
+            },
+        );
         assert!(tree.get_node(2).is_some());
     }
 
@@ -238,9 +271,16 @@ mod tests {
     fn len_and_contains() {
         let cache = DefaultCache::new(100, 0);
         assert_eq!(cache.len(), 0);
-        cache.insert_info(1, ProcInfo {
-            cmd: "a".into(), user: "u".into(), ppid: 0, tgid: 1, start_time_ns: 0,
-        });
+        cache.insert_info(
+            1,
+            ProcInfo {
+                cmd: "a".into(),
+                user: "u".into(),
+                ppid: 0,
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
         assert_eq!(cache.len(), 1);
         assert!(cache.contains_key(1));
         assert!(!cache.contains_key(999));
