@@ -52,8 +52,6 @@ fn proc_path(pid: u32, suffix: &str) -> ArrayString<32> {
     buf
 }
 
-
-
 /// Read the process start time in nanoseconds from `/proc/{pid}/stat`.
 ///
 /// Returns 0 if the process doesn't exist or parsing fails.
@@ -197,8 +195,6 @@ mod tests {
     fn test_read_proc_comm_nonexistent() {
         assert!(read_proc_comm(0x7FFFFFFF).is_none());
     }
-
-
 
     #[test]
     fn test_read_proc_start_time_ns_pid1() {

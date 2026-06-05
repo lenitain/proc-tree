@@ -3,10 +3,10 @@
 //! All functions are generic over [`TreeStore`] and [`CacheStore`] so they
 //! work with any storage backend.
 
-use crate::types::ProcInfo;
 use crate::traits::{CacheStore, TreeStore};
 use crate::tree::{ProcEvent, ProcessLink};
 use crate::types::PidNode;
+use crate::types::ProcInfo;
 
 /// Snapshot all running processes from `/proc`.
 ///
