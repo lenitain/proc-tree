@@ -29,14 +29,6 @@
 //! }
 //! ```
 //!
-//! ## Layers
-//!
-//! | Module | What | When to use |
-//! |--------|------|-------------|
-//! | [`proc`] | Raw `/proc` reading | Just need to read one PID's info |
-//! | [`ProcCache`] | PID→info TTL cache | Need PID→cmd mapping, no tree |
-//! | [`ProcTree`] | Full tree + cache | Need ancestry chains, descendant checks |
-//!
 //! ## PID Reuse Detection
 //!
 //! When a process exits and its PID is reused by a new process, cached data
