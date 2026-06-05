@@ -62,6 +62,14 @@ pub(crate) struct PidNode {
 /// A single entry in a process ancestry chain.
 ///
 /// Displayed as `"pid|cmd|user"` by the `Display` impl.
+///
+/// ```
+/// use proc_tree::ProcessLink;
+///
+/// let link = ProcessLink { pid: 102, cmd: "touch".into(), user: "root".into() };
+/// assert_eq!(link.to_string(), "102|touch|root");
+/// ```
+///
 /// A chain is a `Vec<ProcessLink>` ordered from child to ancestor.
 #[derive(Debug, Clone)]
 pub struct ProcessLink {
@@ -79,6 +87,18 @@ impl fmt::Display for ProcessLink {
 // ---- Builder ----
 
 /// Builder for [`ProcTree`].
+///
+/// ```
+/// use proc_tree::ProcTree;
+/// use std::time::Duration;
+///
+/// let tree = ProcTree::builder()
+///     .tree_capacity(1000)
+///     .tree_ttl(Duration::from_secs(300))
+///     .cache_capacity(2000)
+///     .cache_ttl(Duration::from_secs(600))
+///     .build();
+/// ```
 pub struct ProcTreeBuilder {
     tree_capacity: u64,
     tree_ttl: Duration,
@@ -175,6 +195,14 @@ impl ProcTree {
     ///
     /// Populates both the tree and cache. Call once at startup before
     /// processing events. Idempotent — repeated calls update existing entries.
+    ///
+    /// ```
+    /// use proc_tree::ProcTree;
+    ///
+    /// let mut tree = ProcTree::builder().build();
+    /// tree.snapshot();
+    /// assert!(tree.tree_len() > 0);
+    /// ```
     pub fn snapshot(&mut self) {
         let dir = match std::fs::read_dir("/proc") {
             Ok(d) => d,
@@ -243,6 +271,16 @@ impl ProcTree {
     ///
     /// Call this for each batch of events from your event source
     /// (proc-connector, audit, etc.).
+    ///
+    /// ```
+    /// use proc_tree::{ProcTree, ProcEvent};
+    ///
+    /// let tree = ProcTree::builder().build();
+    /// tree.handle_events(&[
+    ///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
+    ///     ProcEvent::Exec { pid: 200, timestamp_ns: 1 },
+    /// ]);
+    /// ```
     pub fn handle_events(&self, events: &[ProcEvent]) {
         for event in events {
             self.handle_event(event);
@@ -293,6 +331,17 @@ impl ProcTree {
     ///
     /// Checks the cache first (with PID reuse detection), then falls back
     /// to reading `/proc` directly.
+    ///
+    /// ```
+    /// use proc_tree::ProcTree;
+    ///
+    /// let mut tree = ProcTree::builder().build();
+    /// tree.snapshot();
+    ///
+    /// if let Some(info) = tree.resolve(1) {
+    ///     println!("PID 1: cmd={}, user={}", info.cmd, info.user);
+    /// }
+    /// ```
     pub fn resolve(&self, pid: u32) -> Option<ProcInfo> {
         // Try cache (with PID reuse detection)
         if let Some(info) = self.cache.get(pid) {
@@ -322,6 +371,17 @@ impl ProcTree {
     ///
     /// Returns an empty vec if the PID is not in the tree and can't be
     /// resolved from `/proc`.
+    ///
+    /// ```
+    /// use proc_tree::ProcTree;
+    ///
+    /// let mut tree = ProcTree::builder().build();
+    /// tree.snapshot();
+    ///
+    /// let chain = tree.build_chain(1);
+    /// assert!(!chain.is_empty());
+    /// assert_eq!(chain[0].pid, 1);
+    /// ```
     pub fn build_chain(&self, pid: u32) -> Vec<ProcessLink> {
         let mut parts = Vec::new();
         let mut current = pid;
@@ -393,6 +453,17 @@ impl ProcTree {
     /// Check if `pid` is a descendant of any process whose cmd == `target_cmd`.
     ///
     /// Walks up the tree via ppid until hitting root (pid=0/1, self-loop, or cycle).
+    ///
+    /// ```
+    /// use proc_tree::ProcTree;
+    ///
+    /// let mut tree = ProcTree::builder().build();
+    /// tree.snapshot();
+    ///
+    /// let info = tree.resolve(1).unwrap();
+    /// // Every process is a descendant of PID 1
+    /// assert!(tree.is_descendant(std::process::id(), &info.cmd));
+    /// ```
     pub fn is_descendant(&self, pid: u32, target_cmd: &str) -> bool {
         let mut current = pid;
         let mut visited = HashSet::new();
