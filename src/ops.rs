@@ -109,11 +109,23 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &Proc
             );
         }
         ProcEvent::Exec { pid, timestamp_ns } => {
-            if let Some((node, mut info)) = crate::proc::parse_proc_entry(*pid) {
-                info.start_time_ns = *timestamp_ns;
-                tree.insert_node(*pid, node);
-                cache.insert_info(*pid, info);
-            }
+            let (node, mut info) = crate::proc::parse_proc_entry(*pid)
+                .unwrap_or_else(|| {
+                    let cmd = "unknown".to_string();
+                    (
+                        PidNode { ppid: 0, cmd: cmd.clone() },
+                        ProcInfo {
+                            cmd,
+                            user: "unknown".to_string(),
+                            ppid: 0,
+                            tgid: 0,
+                            start_time_ns: 0,
+                        },
+                    )
+                });
+            info.start_time_ns = *timestamp_ns;
+            tree.insert_node(*pid, node);
+            cache.insert_info(*pid, info);
         }
         ProcEvent::Exit { .. } => {
             // Keep the node — still valid for historical chain lookups
