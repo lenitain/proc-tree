@@ -52,11 +52,13 @@
 
 mod cache;
 mod proc;
+mod traits;
 mod tree;
 
 // Public API
 pub use cache::ProcInfo;
 pub use proc::read_proc_start_time_ns;
+pub use traits::{CacheStore, PidNode, TreeStore, build_chain, is_descendant};
 pub use tree::{ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
