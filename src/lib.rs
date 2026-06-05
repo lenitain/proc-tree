@@ -49,7 +49,6 @@
 //! becomes stale. `CacheStore` implementations should compare `start_time_ns`
 //! with the current `/proc` value to detect reuse.
 
-mod cache;
 mod default_store;
 mod ops;
 pub mod proc;
@@ -58,8 +57,7 @@ mod tree;
 mod types;
 
 // Public API — types
-pub use cache::ProcInfo;
-pub use types::PidNode;
+pub use types::{PidNode, ProcInfo};
 
 // Public API — traits
 pub use traits::{CacheStore, TreeStore};
