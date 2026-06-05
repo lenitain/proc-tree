@@ -56,7 +56,7 @@ mod tree;
 
 // Public API
 pub use cache::ProcInfo;
-pub use tree::{PidNode, ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
+pub use tree::{ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
 mod tests {

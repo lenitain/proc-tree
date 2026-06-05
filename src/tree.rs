@@ -51,13 +51,11 @@ pub enum ProcEvent {
 
 /// A node in the process tree.
 #[derive(Clone, Debug)]
-pub struct PidNode {
+pub(crate) struct PidNode {
     /// Parent PID. 0 for PID 1 (init).
     pub ppid: u32,
     /// Command name. Empty after Fork, filled on Exec or snapshot.
     pub cmd: String,
-    /// Process start time in nanoseconds since boot.
-    pub start_time_ns: u64,
 }
 
 // ---- ProcessLink (structured chain element) ----
@@ -228,7 +226,6 @@ impl ProcTree {
                 PidNode {
                     ppid,
                     cmd: cmd.clone(),
-                    start_time_ns,
                 },
             );
             // Directly insert into cache (skip ProcCache::update_from_proc to
@@ -270,7 +267,6 @@ impl ProcTree {
                     PidNode {
                         ppid: *parent_pid,
                         cmd: String::new(),
-                        start_time_ns: *timestamp_ns,
                     },
                 );
             }
@@ -284,7 +280,6 @@ impl ProcTree {
                     PidNode {
                         ppid,
                         cmd: cmd.clone(),
-                        start_time_ns: *timestamp_ns,
                     },
                 );
                 // Update cache
@@ -539,7 +534,7 @@ impl ProcTree {
     /// systemd─┬─bash───vim
     ///         └─nginx───worker
     /// ```
-    pub fn tree_display(&self, root_pid: u32) -> String {
+    pub fn display(&self, root_pid: u32) -> String {
         let cmd = self
             .tree
             .get(&root_pid)
@@ -556,7 +551,7 @@ impl ProcTree {
             let is_last = i == kids.len() - 1;
             let prefix = if is_last { "└─" } else { "├─" };
             let continuation = if is_last { "  " } else { "│ " };
-            let sub = self.tree_display_inner(kid);
+            let sub = self.display_inner(kid);
             let lines: Vec<&str> = sub.lines().collect();
             if i == 0 {
                 output.push_str(&format!("─{}", lines[0]));
@@ -574,7 +569,7 @@ impl ProcTree {
         output
     }
 
-    fn tree_display_inner(&self, pid: u32) -> String {
+    fn display_inner(&self, pid: u32) -> String {
         let cmd = self
             .tree
             .get(&pid)
@@ -591,7 +586,7 @@ impl ProcTree {
             let is_last = i == kids.len() - 1;
             let prefix = if is_last { "└─" } else { "├─" };
             let continuation = if is_last { "  " } else { "│ " };
-            let sub = self.tree_display_inner(kid);
+            let sub = self.display_inner(kid);
             let lines: Vec<&str> = sub.lines().collect();
             if i == 0 {
                 output.push_str(&format!("─{}", lines[0]));
@@ -668,7 +663,6 @@ mod tests {
             PidNode {
                 ppid: 0,
                 cmd: "systemd".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -676,7 +670,6 @@ mod tests {
             PidNode {
                 ppid: 1,
                 cmd: "bash".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -684,7 +677,6 @@ mod tests {
             PidNode {
                 ppid: 100,
                 cmd: "sh".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -692,7 +684,6 @@ mod tests {
             PidNode {
                 ppid: 101,
                 cmd: String::new(), // Fork, no Exec yet
-                start_time_ns: 0,
             },
         );
 
@@ -712,7 +703,6 @@ mod tests {
             PidNode {
                 ppid: 2,
                 cmd: "a".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -720,7 +710,6 @@ mod tests {
             PidNode {
                 ppid: 3,
                 cmd: "b".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -728,7 +717,6 @@ mod tests {
             PidNode {
                 ppid: 1,
                 cmd: "c".into(),
-                start_time_ns: 0,
             },
         );
         // Should not infinite loop
@@ -743,7 +731,6 @@ mod tests {
             PidNode {
                 ppid: 2,
                 cmd: "a".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -751,7 +738,6 @@ mod tests {
             PidNode {
                 ppid: 3,
                 cmd: "b".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -759,7 +745,6 @@ mod tests {
             PidNode {
                 ppid: 1,
                 cmd: "c".into(),
-                start_time_ns: 0,
             },
         );
         let chain = tree.build_chain(1);
@@ -833,7 +818,6 @@ mod tests {
             PidNode {
                 ppid: 0,
                 cmd: "init".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -841,7 +825,6 @@ mod tests {
             PidNode {
                 ppid: 500000,
                 cmd: "a".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -849,7 +832,6 @@ mod tests {
             PidNode {
                 ppid: 500000,
                 cmd: "b".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -857,7 +839,6 @@ mod tests {
             PidNode {
                 ppid: 500000,
                 cmd: "c".into(),
-                start_time_ns: 0,
             },
         );
         // children() scans /proc — these high PIDs won't exist, so use
@@ -878,14 +859,13 @@ mod tests {
     }
 
     #[test]
-    fn test_tree_display() {
+    fn test_display() {
         let tree = ProcTree::builder().build();
         tree.tree.insert(
             1,
             PidNode {
                 ppid: 0,
                 cmd: "init".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -893,7 +873,6 @@ mod tests {
             PidNode {
                 ppid: 1,
                 cmd: "bash".into(),
-                start_time_ns: 0,
             },
         );
         tree.tree.insert(
@@ -901,10 +880,9 @@ mod tests {
             PidNode {
                 ppid: 1,
                 cmd: "nginx".into(),
-                start_time_ns: 0,
             },
         );
-        let display = tree.tree_display(1);
+        let display = tree.display(1);
         assert!(display.contains("init"), "should contain root cmd");
         assert!(
             display.contains("bash") || display.contains("nginx"),
