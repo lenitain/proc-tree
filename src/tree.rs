@@ -351,8 +351,8 @@ impl ProcTree {
         }
         // Fallback: read /proc directly
         let cmd = read_proc_comm(pid)?;
-        let (user, ppid, tgid) = read_proc_status_fields(pid)
-            .unwrap_or_else(|| (CompactString::new("unknown"), 0, 0));
+        let (user, ppid, tgid) =
+            read_proc_status_fields(pid).unwrap_or_else(|| (CompactString::new("unknown"), 0, 0));
         let start_time_ns = read_proc_start_time_ns(pid);
         let info = ProcInfo {
             cmd,
@@ -401,7 +401,8 @@ impl ProcTree {
                 // Fallback: read from /proc
                 match read_proc_status_fields(current) {
                     Some((_, p, _)) => {
-                        let c = read_proc_comm(current).unwrap_or_else(|| CompactString::new("unknown"));
+                        let c = read_proc_comm(current)
+                            .unwrap_or_else(|| CompactString::new("unknown"));
                         (p, c)
                     }
                     None => {
