@@ -289,15 +289,29 @@ mod tests {
     #[test]
     fn default_cache_ttl_expired() {
         let cache = DefaultCache::new(100, 0);
-        cache.insert_info(1, ProcInfo {
-            cmd: "a".into(), user: "u".into(), ppid: 0, tgid: 1, start_time_ns: 0,
-        });
+        cache.insert_info(
+            1,
+            ProcInfo {
+                cmd: "a".into(),
+                user: "u".into(),
+                ppid: 0,
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
         assert!(cache.get_info(1).is_some());
 
         let cache = DefaultCache::new(100, 1);
-        cache.insert_info(1, ProcInfo {
-            cmd: "a".into(), user: "u".into(), ppid: 0, tgid: 1, start_time_ns: 0,
-        });
+        cache.insert_info(
+            1,
+            ProcInfo {
+                cmd: "a".into(),
+                user: "u".into(),
+                ppid: 0,
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
         assert!(cache.get_info(1).is_some());
         std::thread::sleep(Duration::from_millis(1100));
         assert!(cache.get_info(1).is_none());
@@ -307,23 +321,54 @@ mod tests {
     fn is_empty_default() {
         let tree = DefaultTree::new(100, 0);
         assert!(tree.is_empty());
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         assert!(!tree.is_empty());
 
         let cache = DefaultCache::new(100, 0);
         assert!(cache.is_empty());
-        cache.insert_info(1, ProcInfo {
-            cmd: "a".into(), user: "u".into(), ppid: 0, tgid: 1, start_time_ns: 0,
-        });
+        cache.insert_info(
+            1,
+            ProcInfo {
+                cmd: "a".into(),
+                user: "u".into(),
+                ppid: 0,
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
         assert!(!cache.is_empty());
     }
 
     #[test]
     fn all_pids_returns_keys() {
         let tree = DefaultTree::new(100, 0);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "a".into() });
-        tree.insert_node(2, PidNode { ppid: 1, cmd: "b".into() });
-        tree.insert_node(3, PidNode { ppid: 1, cmd: "c".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "a".into(),
+            },
+        );
+        tree.insert_node(
+            2,
+            PidNode {
+                ppid: 1,
+                cmd: "b".into(),
+            },
+        );
+        tree.insert_node(
+            3,
+            PidNode {
+                ppid: 1,
+                cmd: "c".into(),
+            },
+        );
         let mut pids = tree.all_pids();
         pids.sort();
         assert_eq!(pids, vec![1, 2, 3]);
@@ -332,7 +377,13 @@ mod tests {
     #[test]
     fn tree_ttl_contains_key_expires() {
         let tree = DefaultTree::new(100, 1);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "a".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "a".into(),
+            },
+        );
         assert!(tree.contains_key(1));
         std::thread::sleep(Duration::from_millis(1100));
         assert!(!tree.contains_key(1));
