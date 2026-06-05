@@ -20,7 +20,7 @@
 //! # impl CacheStore for MyCache {
 //! #     fn get_info(&self, pid: u32) -> Option<ProcInfo> { None }
 //! #     fn insert_info(&self, pid: u32, info: ProcInfo) {}
-//! # }
+//! }
 //!
 //! let tree = MyTree;
 //! let cache = MyCache;
@@ -53,15 +53,28 @@ mod cache;
 mod default_store;
 pub mod proc;
 mod traits;
+mod types;
 mod tree;
+mod ops;
 
-// Public API — traits and types
+// Public API — types
 pub use cache::ProcInfo;
-pub use default_store::{DefaultCache, DefaultTree};
-pub use proc::read_proc_start_time_ns;
-pub use traits::{
-    CacheStore, PidNode, TreeStore, build_chain_links, build_chain_string, children, descendants,
-    display, find_by_cmd, find_by_user, handle_event, handle_events, is_descendant, resolve,
-    siblings, snapshot, tree_len,
-};
+pub use types::PidNode;
+
+// Public API — traits
+pub use traits::{CacheStore, TreeStore};
+
+// Public API — default implementations
+pub use default_store::{DefaultCache, DefaultStore, DefaultTree};
+
+// Public API — tree types
 pub use tree::{ProcEvent, ProcessLink};
+
+// Public API — operations
+pub use ops::{
+    build_chain_links, build_chain_string, children, descendants, display, find_by_cmd,
+    find_by_user, handle_event, handle_events, is_descendant, resolve, siblings, snapshot, tree_len,
+};
+
+// Public API — proc utilities
+pub use proc::{parse_proc_entry, read_proc_start_time_ns};

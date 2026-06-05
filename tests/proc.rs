@@ -8,8 +8,8 @@ use helpers::{TestCache, TestTree};
 
 #[test]
 fn resolve_pid1_exists() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let info = resolve(&cache, 1).expect("PID 1 should exist");
     assert!(!info.cmd.is_empty(), "PID 1 should have a command name");
@@ -17,8 +17,8 @@ fn resolve_pid1_exists() {
 
 #[test]
 fn resolve_pid1_is_init() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let info = resolve(&cache, 1).unwrap();
     // PID 1 is typically "systemd" or "init"
@@ -31,7 +31,7 @@ fn resolve_pid1_is_init() {
 
 #[test]
 fn resolve_nonexistent_pid() {
-    let cache = TestCache::new();
+    let cache = TestCache::default();
     assert!(
         resolve(&cache, 0x7FFFFFFF).is_none(),
         "nonexistent PID should return None"
@@ -40,8 +40,8 @@ fn resolve_nonexistent_pid() {
 
 #[test]
 fn resolve_self() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let info = resolve(&cache, my_pid);
@@ -50,8 +50,8 @@ fn resolve_self() {
 
 #[test]
 fn resolve_current_process_fields() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let info = resolve(&cache, my_pid).unwrap();
@@ -64,8 +64,8 @@ fn resolve_current_process_fields() {
 
 #[test]
 fn resolve_pid1_fields() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let info = resolve(&cache, 1).unwrap();
     assert_eq!(info.ppid, 0, "PID 1's ppid should be 0");

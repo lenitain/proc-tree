@@ -8,8 +8,8 @@ use helpers::{TestCache, TestTree};
 
 #[test]
 fn snapshot_populates_tree() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     assert_eq!(tree_len(&tree), 0);
     snapshot(&tree, &cache);
     assert!(
@@ -20,8 +20,8 @@ fn snapshot_populates_tree() {
 
 #[test]
 fn snapshot_idempotent() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let _len1 = tree_len(&tree);
     snapshot(&tree, &cache);
@@ -32,8 +32,8 @@ fn snapshot_idempotent() {
 
 #[test]
 fn snapshot_includes_pid1() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let info = resolve(&cache, 1);
     assert!(info.is_some(), "PID 1 should be in tree after snapshot");
@@ -43,8 +43,8 @@ fn snapshot_includes_pid1() {
 
 #[test]
 fn build_chain_pid1() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let chain = build_chain_links(&tree, &cache, 1);
     assert!(!chain.is_empty(), "PID 1 should have a chain");
@@ -53,8 +53,8 @@ fn build_chain_pid1() {
 
 #[test]
 fn build_chain_current_process() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let chain = build_chain_links(&tree, &cache, my_pid);
@@ -66,8 +66,8 @@ fn build_chain_current_process() {
 
 #[test]
 fn build_chain_nonexistent() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     let chain = build_chain_links(&tree, &cache, 0x7FFFFFFF);
     // Nonexistent PID returns a chain with "unknown" entries (not empty)
     assert!(
@@ -78,8 +78,8 @@ fn build_chain_nonexistent() {
 
 #[test]
 fn build_chain_string_format() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let s = build_chain_string(&tree, &cache, 1);
     assert!(s.contains("1|"), "should contain PID 1 with pipe separator");
@@ -87,8 +87,8 @@ fn build_chain_string_format() {
 
 #[test]
 fn build_chain_string_current_process() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let s = build_chain_string(&tree, &cache, my_pid);
@@ -102,8 +102,8 @@ fn build_chain_string_current_process() {
 
 #[test]
 fn is_descendant_self_is_not_descendant() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     // A process is not considered a descendant of itself
     assert!(!is_descendant(&tree, 1, "init"));
@@ -111,8 +111,8 @@ fn is_descendant_self_is_not_descendant() {
 
 #[test]
 fn is_descendant_current_of_init() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     // Every process is a descendant of init/systemd
@@ -126,7 +126,7 @@ fn is_descendant_current_of_init() {
 
 #[test]
 fn is_descendant_nonexistent() {
-    let tree = TestTree::new();
+    let tree = TestTree::default();
     assert!(!is_descendant(&tree, 0x7FFFFFFF, "anything"));
 }
 
@@ -134,8 +134,8 @@ fn is_descendant_nonexistent() {
 
 #[test]
 fn children_of_pid1() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let kids = children(&tree, 1);
     assert!(!kids.is_empty(), "PID 1 should have children");
@@ -143,8 +143,8 @@ fn children_of_pid1() {
 
 #[test]
 fn descendants_of_pid1() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let desc = descendants(&tree, 1);
     // All processes except PID 1 itself
@@ -153,7 +153,7 @@ fn descendants_of_pid1() {
 
 #[test]
 fn children_nonexistent() {
-    let tree = TestTree::new();
+    let tree = TestTree::default();
     let kids = children(&tree, 0x7FFFFFFF);
     assert!(kids.is_empty(), "nonexistent PID should have no children");
 }
@@ -162,8 +162,8 @@ fn children_nonexistent() {
 
 #[test]
 fn siblings_of_current_process() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let sib = siblings(&tree, my_pid);
@@ -175,8 +175,8 @@ fn siblings_of_current_process() {
 
 #[test]
 fn find_by_cmd_init() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let info = resolve(&cache, 1).unwrap();
     let found = find_by_cmd(&tree, &info.cmd);
@@ -185,8 +185,8 @@ fn find_by_cmd_init() {
 
 #[test]
 fn find_by_cmd_nonexistent() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let found = find_by_cmd(&tree, "definitely_not_a_real_process_name_12345");
     assert!(found.is_empty(), "should not find nonexistent cmd");
@@ -194,8 +194,8 @@ fn find_by_cmd_nonexistent() {
 
 #[test]
 fn find_by_user_root() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let found = find_by_user(&tree, &cache, "root");
     assert!(!found.is_empty(), "should find at least one root process");
@@ -204,8 +204,8 @@ fn find_by_user_root() {
 
 #[test]
 fn find_by_user_nonexistent() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let found = find_by_user(&tree, &cache, "definitely_not_a_real_user_12345");
     assert!(found.is_empty(), "should not find nonexistent user");
@@ -215,8 +215,8 @@ fn find_by_user_nonexistent() {
 
 #[test]
 fn fork_creates_tree_node() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     handle_event(
         &tree,
         &cache,
@@ -235,8 +235,8 @@ fn fork_creates_tree_node() {
 
 #[test]
 fn fork_multiple_children() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     for i in 600..610 {
         handle_event(
             &tree,

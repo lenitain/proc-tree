@@ -26,8 +26,8 @@ fn process_link_display_special_chars() {
 
 #[test]
 fn chain_string_semicolon_separated() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let my_pid = std::process::id();
     let s = build_chain_string(&tree, &cache, my_pid);
@@ -38,8 +38,8 @@ fn chain_string_semicolon_separated() {
 
 #[test]
 fn chain_string_each_link_has_pipes() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let s = build_chain_string(&tree, &cache, 1);
     let parts: Vec<&str> = s.split(';').collect();
@@ -51,8 +51,8 @@ fn chain_string_each_link_has_pipes() {
 
 #[test]
 fn display_single_process() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     // Manually add a single process via fork
     handle_event(
         &tree,
@@ -70,8 +70,8 @@ fn display_single_process() {
 
 #[test]
 fn display_with_children() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let d = display(&tree, 1);
     // Should contain tree characters
@@ -84,7 +84,7 @@ fn display_with_children() {
 
 #[test]
 fn display_nonexistent_pid() {
-    let tree = TestTree::new();
+    let tree = TestTree::default();
     let d = display(&tree, 0x7FFFFFFF);
     // Should return "unknown" or similar
     assert!(!d.is_empty(), "display should handle nonexistent PID");

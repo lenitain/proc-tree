@@ -1,7 +1,7 @@
 //! Default storage implementations using standard library types.
 //!
-//! `DefaultTree` and `DefaultCache` use `HashMap` behind `Mutex` with
-//! optional TTL-based eviction. No external dependencies.
+//! [`DefaultStore<V>`] is a generic `HashMap<Mutex>` store with optional
+//! TTL-based eviction. [`DefaultTree`] and [`DefaultCache`] are type aliases.
 //!
 //! # Example
 //!
@@ -64,22 +64,24 @@ fn len_inner<V>(inner: &Inner<V>) -> usize {
     inner.lock().unwrap().len()
 }
 
-fn contains_inner<V: Clone>(inner: &Inner<V>, pid: u32, ttl: Duration) -> bool {
-    get_inner(inner, pid, ttl).is_some()
-}
+// ---- DefaultStore<V> ----
 
-// ---- DefaultTree ----
-
-/// Default process tree backed by `HashMap<Mutex>`.
+/// Generic store backed by `HashMap<Mutex>` with optional TTL eviction.
 ///
 /// Thread-safe via `Arc<Mutex<...>>`. Cloning shares the same data.
-pub struct DefaultTree {
-    inner: Inner<PidNode>,
+pub struct DefaultStore<V> {
+    inner: Inner<V>,
     ttl: Duration,
 }
 
-impl DefaultTree {
-    /// Create a new tree with the given capacity hint and TTL in seconds.
+/// Process tree store. See [`DefaultStore`].
+pub type DefaultTree = DefaultStore<PidNode>;
+
+/// Process info cache. See [`DefaultStore`].
+pub type DefaultCache = DefaultStore<ProcInfo>;
+
+impl<V: Clone> DefaultStore<V> {
+    /// Create a new store with the given capacity hint and TTL in seconds.
     /// `ttl_secs = 0` means no expiration.
     pub fn new(_capacity: u64, ttl_secs: u64) -> Self {
         Self {
@@ -93,23 +95,30 @@ impl DefaultTree {
         len_inner(&self.inner)
     }
 
-    /// Returns `true` if the tree contains no entries.
+    /// Returns `true` if the store contains no entries.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Check if a PID exists and is not expired.
     pub fn contains_key(&self, pid: u32) -> bool {
-        contains_inner(&self.inner, pid, self.ttl)
+        get_inner(&self.inner, pid, self.ttl).is_some()
     }
 }
 
-impl Clone for DefaultTree {
+impl<V: Clone> Clone for DefaultStore<V> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
             ttl: self.ttl,
         }
+    }
+}
+
+impl<V: Clone> Default for DefaultStore<V> {
+    /// Creates a store with capacity 100 and no TTL.
+    fn default() -> Self {
+        Self::new(100, 0)
     }
 }
 
@@ -124,51 +133,6 @@ impl TreeStore for DefaultTree {
 
     fn all_pids(&self) -> Vec<u32> {
         self.inner.lock().unwrap().keys().copied().collect()
-    }
-}
-
-// ---- DefaultCache ----
-
-/// Default process info cache backed by `HashMap<Mutex>`.
-///
-/// Thread-safe via `Arc<Mutex<...>>`. Cloning shares the same data.
-pub struct DefaultCache {
-    inner: Inner<ProcInfo>,
-    ttl: Duration,
-}
-
-impl DefaultCache {
-    /// Create a new cache with the given capacity hint and TTL in seconds.
-    /// `ttl_secs = 0` means no expiration.
-    pub fn new(_capacity: u64, ttl_secs: u64) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
-            ttl: Duration::from_secs(ttl_secs),
-        }
-    }
-
-    /// Number of entries (including possibly-expired ones not yet evicted).
-    pub fn len(&self) -> usize {
-        len_inner(&self.inner)
-    }
-
-    /// Returns `true` if the cache contains no entries.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Check if a PID exists and is not expired.
-    pub fn contains_key(&self, pid: u32) -> bool {
-        contains_inner(&self.inner, pid, self.ttl)
-    }
-}
-
-impl Clone for DefaultCache {
-    fn clone(&self) -> Self {
-        Self {
-            inner: Arc::clone(&self.inner),
-            ttl: self.ttl,
-        }
     }
 }
 

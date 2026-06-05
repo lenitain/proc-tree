@@ -8,8 +8,8 @@ use helpers::{TestCache, TestTree};
 
 #[test]
 fn resolve_pid0() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     // PID 0 doesn't exist as a process
     let info = resolve(&cache, 0);
@@ -18,8 +18,8 @@ fn resolve_pid0() {
 
 #[test]
 fn build_chain_pid0() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     let chain = build_chain_links(&tree, &cache, 0);
     // PID 0 doesn't exist, should return empty or minimal chain
@@ -30,13 +30,13 @@ fn build_chain_pid0() {
 
 #[test]
 fn resolve_max_pid() {
-    let cache = TestCache::new();
+    let cache = TestCache::default();
     assert!(resolve(&cache, u32::MAX).is_none());
 }
 
 #[test]
 fn resolve_large_pid() {
-    let cache = TestCache::new();
+    let cache = TestCache::default();
     assert!(resolve(&cache, 4_194_304).is_none()); // PID_MAX_DEFAULT
 }
 
@@ -44,16 +44,16 @@ fn resolve_large_pid() {
 
 #[test]
 fn handle_empty_events() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     handle_events(&tree, &cache, &[]);
     assert_eq!(tree_len(&tree), 0);
 }
 
 #[test]
 fn handle_many_forks() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     let events: Vec<ProcEvent> = (1000..2000)
         .map(|i| ProcEvent::Fork {
             child_pid: i,
@@ -67,8 +67,8 @@ fn handle_many_forks() {
 
 #[test]
 fn handle_fork_then_exec_then_exit() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     let pid = 5000;
     handle_event(
         &tree,
@@ -96,8 +96,8 @@ fn handle_fork_then_exec_then_exit() {
 
 #[test]
 fn build_chain_with_cycle() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     // Create a cycle: 1 → 2 → 3 → 1
     handle_event(
         &tree,
@@ -127,8 +127,8 @@ fn build_chain_with_cycle() {
 
 #[test]
 fn is_descendant_with_cycle() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     handle_event(
         &tree,
         &cache,

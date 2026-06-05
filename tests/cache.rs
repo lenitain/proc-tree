@@ -6,8 +6,8 @@ use helpers::{TestCache, TestTree};
 
 #[test]
 fn cache_hit_on_resolve() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     // First resolve populates cache
     let info1 = resolve(&cache, 1).unwrap();
@@ -19,8 +19,8 @@ fn cache_hit_on_resolve() {
 
 #[test]
 fn cache_updated_on_exec_event() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     // Fork creates tree node
     handle_event(
         &tree,
@@ -48,8 +48,8 @@ fn cache_updated_on_exec_event() {
 
 #[test]
 fn cache_preserves_on_exit() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     snapshot(&tree, &cache);
     // Get info before exit
     let info_before = resolve(&cache, 1).unwrap();
@@ -61,8 +61,8 @@ fn cache_preserves_on_exit() {
 
 #[test]
 fn tree_len_tracks_entries() {
-    let tree = TestTree::new();
-    let cache = TestCache::new();
+    let tree = TestTree::default();
+    let cache = TestCache::default();
     assert_eq!(tree_len(&tree), 0);
     handle_event(
         &tree,

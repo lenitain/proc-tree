@@ -11,13 +11,16 @@ use arrayvec::ArrayString;
 /// Clock ticks per second (POSIX `sysconf(_SC_CLK_TCK)`).
 ///
 /// Returns 100 as fallback — the overwhelmingly common value on Linux.
-/// This is a system-wide constant that never changes at runtime.
+/// Cached after the first call since the value never changes at runtime.
 fn clock_ticks_per_sec() -> i64 {
-    // SAFETY: sysconf(_SC_CLK_TCK) is a pure read-only query with no
-    // side effects, cannot fail or cause UB. It returns a system-wide
-    // constant that is set at boot and never changes.
-    let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    if ticks <= 0 { 100 } else { ticks }
+    static TICKS: OnceLock<i64> = OnceLock::new();
+    *TICKS.get_or_init(|| {
+        // SAFETY: sysconf(_SC_CLK_TCK) is a pure read-only query with no
+        // side effects, cannot fail or cause UB. It returns a system-wide
+        // constant that is set at boot and never changes.
+        let ticks = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
+        if ticks <= 0 { 100 } else { ticks }
+    })
 }
 
 /// Read the command name for a PID from `/proc/{pid}/comm`.
@@ -147,6 +150,40 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
         }
         map
     })
+}
+
+/// Parse `/proc/{pid}/status` into a `(PidNode, ProcInfo)` pair.
+///
+/// Returns `None` if the process doesn't exist or the status file can't be read.
+pub fn parse_proc_entry(pid: u32) -> Option<(crate::types::PidNode, crate::types::ProcInfo)> {
+    let path = proc_path(pid, "status");
+    let status = std::fs::read_to_string(path.as_str()).ok()?;
+    let mut ppid = 0u32;
+    let mut cmd = String::new();
+    let mut user = String::new();
+    let mut tgid = 0u32;
+    for line in status.lines() {
+        if let Some(val) = line.strip_prefix("PPid:") {
+            ppid = val.trim().parse().unwrap_or(0);
+        } else if let Some(val) = line.strip_prefix("Name:") {
+            cmd = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("Uid:") {
+            if let Some(uid_str) = val.split_whitespace().next()
+                && let Ok(uid) = uid_str.parse::<u32>()
+            {
+                user = uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
+            } else {
+                user = "unknown".to_string();
+            }
+        } else if let Some(val) = line.strip_prefix("Tgid:") {
+            tgid = val.trim().parse().unwrap_or(0);
+        }
+    }
+    let start_time_ns = read_proc_start_time_ns(pid);
+    Some((
+        crate::types::PidNode { ppid, cmd: cmd.clone() },
+        crate::types::ProcInfo { cmd, user, ppid, tgid, start_time_ns },
+    ))
 }
 
 /// Convert a UID to a username by looking up `/etc/passwd`.
