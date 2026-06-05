@@ -24,3 +24,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Builder pattern**: configurable tree/cache capacity and TTL
 - **Test suite**: 95 tests (26 unit + 59 integration + 10 doc-tests)
 - **Documentation**: README, doc-tests for all public APIs
+- GitHub Actions CI workflow (build + test + fmt + clippy)
