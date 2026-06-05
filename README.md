@@ -143,7 +143,7 @@ pub enum ProcEvent {
 cargo test
 ```
 
-70 tests covering snapshot, chain building, descendant checks, display formatting, edge cases (cycles, nonexistent PIDs, concurrent access).
+90 tests covering snapshot, chain building, descendant checks, display formatting, edge cases (cycles, nonexistent PIDs, concurrent access).
 
 ## Modules
 

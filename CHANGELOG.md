@@ -21,5 +21,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Public `proc` module**: `read_proc_comm()`, `read_proc_status_fields()`, `uid_to_username()`, `read_proc_start_time_ns()` for direct `/proc` access
 - **Zero heap allocation** for `/proc` path formatting (`ArrayString`)
 - **Thread safety**: trait methods accept `&self` for interior mutability
-- **Test suite**: 70 tests (15 unit + 48 integration + 7 doc-tests)
+- **Test suite**: 90 tests (19 unit + 52 integration + 19 doc-tests)
 - **Documentation**: README, doc-tests for all public APIs

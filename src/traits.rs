@@ -42,6 +42,17 @@ pub trait CacheStore {
 ///
 /// Populates both the tree and cache. Call once at startup before
 /// processing events.
+///
+/// ```no_run
+/// use proc_tree::{DefaultTree, DefaultCache, snapshot, TreeStore};
+///
+/// let tree = DefaultTree::new(65536, 600);
+/// let cache = DefaultCache::new(65536, 600);
+/// snapshot(&tree, &cache);
+///
+/// // PID 1 should always exist on Linux
+/// assert!(tree.get_node(1).is_some());
+/// ```
 pub fn snapshot(tree: &impl TreeStore, cache: &impl CacheStore) {
     let dir = match std::fs::read_dir("/proc") {
         Ok(d) => d,
@@ -107,6 +118,17 @@ pub fn snapshot(tree: &impl TreeStore, cache: &impl CacheStore) {
 /// Resolve a PID to its process info.
 ///
 /// Checks the cache first, then falls back to reading `/proc` directly.
+///
+/// ```no_run
+/// use proc_tree::{DefaultTree, DefaultCache, snapshot, resolve, TreeStore};
+///
+/// let tree = DefaultTree::new(65536, 600);
+/// let cache = DefaultCache::new(65536, 600);
+/// snapshot(&tree, &cache);
+///
+/// let info = resolve(&cache, 1).unwrap();
+/// assert!(!info.cmd.is_empty());
+/// ```
 pub fn resolve(cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
     // Try cache first
     if let Some(info) = cache.get_info(pid) {
@@ -130,6 +152,20 @@ pub fn resolve(cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
 }
 
 /// Handle a batch of process lifecycle events.
+///
+/// ```
+/// use proc_tree::{DefaultTree, DefaultCache, handle_events, ProcEvent, CacheStore, TreeStore};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// let cache = DefaultCache::new(100, 0);
+///
+/// handle_events(&tree, &cache, &[
+///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
+/// ]);
+///
+/// let node = tree.get_node(200).unwrap();
+/// assert_eq!(node.ppid, 100);
+/// ```
 pub fn handle_events(tree: &impl TreeStore, cache: &impl CacheStore, events: &[crate::ProcEvent]) {
     for event in events {
         handle_event(tree, cache, event);
@@ -181,6 +217,20 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &crat
 }
 
 /// Check if `pid` is a descendant of any process whose cmd == `target_cmd`.
+///
+/// ```
+/// use proc_tree::{DefaultTree, is_descendant, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "sshd".into() });
+/// tree.insert_node(200, PidNode { ppid: 100, cmd: "bash".into() });
+///
+/// assert!(is_descendant(&tree, 200, "sshd"));
+/// assert!(is_descendant(&tree, 200, "init"));
+/// assert!(!is_descendant(&tree, 200, "nginx"));
+/// assert!(!is_descendant(&tree, 1, "sshd")); // init is not a descendant of sshd
+/// ```
 pub fn is_descendant(tree: &impl TreeStore, pid: u32, target_cmd: &str) -> bool {
     let mut current = pid;
     let mut visited = std::collections::HashSet::new();
@@ -251,6 +301,23 @@ pub fn build_chain_links(
 /// Build a chain string from the process tree.
 ///
 /// Format: `"102|touch|root;101|sh|root;100|openclaw|root;1|systemd|root"`
+///
+/// ```
+/// use proc_tree::{DefaultTree, DefaultCache, build_chain_string, TreeStore, CacheStore, PidNode, ProcInfo};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// let cache = DefaultCache::new(100, 0);
+///
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// cache.insert_info(1, ProcInfo { cmd: "init".into(), user: "root".into(), ppid: 0, tgid: 1, start_time_ns: 0 });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "sshd".into() });
+/// cache.insert_info(100, ProcInfo { cmd: "sshd".into(), user: "root".into(), ppid: 1, tgid: 100, start_time_ns: 0 });
+/// tree.insert_node(200, PidNode { ppid: 100, cmd: "bash".into() });
+/// cache.insert_info(200, ProcInfo { cmd: "bash".into(), user: "root".into(), ppid: 100, tgid: 200, start_time_ns: 0 });
+///
+/// let chain = build_chain_string(&tree, &cache, 200);
+/// assert_eq!(chain, "200|bash|root;100|sshd|root;1|init|root");
+/// ```
 pub fn build_chain_string(tree: &impl TreeStore, cache: &impl CacheStore, pid: u32) -> String {
     build_chain_links(tree, cache, pid)
         .iter()
@@ -260,6 +327,22 @@ pub fn build_chain_string(tree: &impl TreeStore, cache: &impl CacheStore, pid: u
 }
 
 /// Get direct children of a PID.
+///
+/// ```
+/// use proc_tree::{DefaultTree, children, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "a".into() });
+/// tree.insert_node(200, PidNode { ppid: 1, cmd: "b".into() });
+/// tree.insert_node(300, PidNode { ppid: 100, cmd: "c".into() });
+///
+/// let mut kids = children(&tree, 1);
+/// kids.sort();
+/// assert_eq!(kids, vec![100, 200]);
+/// assert_eq!(children(&tree, 100), vec![300]);
+/// assert!(children(&tree, 999).is_empty());
+/// ```
 pub fn children(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
     tree.all_pids()
         .into_iter()
@@ -267,7 +350,22 @@ pub fn children(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
         .collect()
 }
 
-/// Get all descendants of a PID (BFS traversal.
+/// Get all descendants of a PID (BFS traversal).
+///
+/// ```
+/// use proc_tree::{DefaultTree, descendants, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "a".into() });
+/// tree.insert_node(200, PidNode { ppid: 100, cmd: "b".into() });
+/// tree.insert_node(300, PidNode { ppid: 200, cmd: "c".into() });
+///
+/// let mut desc = descendants(&tree, 1);
+/// desc.sort();
+/// assert_eq!(desc, vec![100, 200, 300]);
+/// assert_eq!(descendants(&tree, 300), Vec::<u32>::new());
+/// ```
 pub fn descendants(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
     let mut result = Vec::new();
     let mut queue = std::collections::VecDeque::new();
@@ -285,6 +383,21 @@ pub fn descendants(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
 /// Get siblings of a PID (processes with the same parent).
 ///
 /// Excludes the given pid itself.
+///
+/// ```
+/// use proc_tree::{DefaultTree, siblings, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "a".into() });
+/// tree.insert_node(200, PidNode { ppid: 1, cmd: "b".into() });
+/// tree.insert_node(300, PidNode { ppid: 1, cmd: "c".into() });
+///
+/// let mut sibs = siblings(&tree, 100);
+/// sibs.sort();
+/// assert_eq!(sibs, vec![200, 300]);
+/// assert!(siblings(&tree, 1).is_empty()); // init has no siblings
+/// ```
 pub fn siblings(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
     let ppid = match tree.get_node(pid) {
         Some(node) => node.ppid,
@@ -297,6 +410,21 @@ pub fn siblings(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
 }
 
 /// Find all PIDs whose cmd matches the given string.
+///
+/// ```
+/// use proc_tree::{DefaultTree, find_by_cmd, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "sshd".into() });
+/// tree.insert_node(200, PidNode { ppid: 1, cmd: "sshd".into() });
+/// tree.insert_node(300, PidNode { ppid: 1, cmd: "bash".into() });
+///
+/// let mut sshds = find_by_cmd(&tree, "sshd");
+/// sshds.sort();
+/// assert_eq!(sshds, vec![100, 200]);
+/// assert_eq!(find_by_cmd(&tree, "nginx"), Vec::<u32>::new());
+/// ```
 pub fn find_by_cmd(tree: &impl TreeStore, target_cmd: &str) -> Vec<u32> {
     tree.all_pids()
         .into_iter()
@@ -312,6 +440,22 @@ pub fn find_by_cmd(tree: &impl TreeStore, target_cmd: &str) -> Vec<u32> {
 }
 
 /// Find all PIDs whose user matches the given string.
+///
+/// ```
+/// use proc_tree::{DefaultTree, DefaultCache, find_by_user, TreeStore, CacheStore, PidNode, ProcInfo};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// let cache = DefaultCache::new(100, 0);
+///
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// cache.insert_info(1, ProcInfo { cmd: "init".into(), user: "root".into(), ppid: 0, tgid: 1, start_time_ns: 0 });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "bash".into() });
+/// cache.insert_info(100, ProcInfo { cmd: "bash".into(), user: "alice".into(), ppid: 1, tgid: 100, start_time_ns: 0 });
+///
+/// assert_eq!(find_by_user(&tree, &cache, "root"), vec![1]);
+/// assert_eq!(find_by_user(&tree, &cache, "alice"), vec![100]);
+/// assert_eq!(find_by_user(&tree, &cache, "nobody"), Vec::<u32>::new());
+/// ```
 pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user: &str) -> Vec<u32> {
     tree.all_pids()
         .into_iter()
@@ -326,6 +470,20 @@ pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user:
 }
 
 /// Render a pstree-style display starting from the given root PID.
+///
+/// ```
+/// use proc_tree::{DefaultTree, display, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(100, PidNode { ppid: 1, cmd: "sshd".into() });
+/// tree.insert_node(200, PidNode { ppid: 1, cmd: "cron".into() });
+///
+/// let output = display(&tree, 1);
+/// assert!(output.starts_with("init"));
+/// assert!(output.contains("sshd"));
+/// assert!(output.contains("cron"));
+/// ```
 pub fn display(tree: &impl TreeStore, root_pid: u32) -> String {
     let cmd = tree
         .get_node(root_pid)
@@ -395,6 +553,17 @@ fn display_inner(tree: &impl TreeStore, pid: u32) -> String {
 }
 
 /// Get the number of entries in the tree.
+///
+/// ```
+/// use proc_tree::{DefaultTree, tree_len, TreeStore, PidNode};
+///
+/// let tree = DefaultTree::new(100, 0);
+/// assert_eq!(tree_len(&tree), 0);
+///
+/// tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+/// tree.insert_node(2, PidNode { ppid: 1, cmd: "bash".into() });
+/// assert_eq!(tree_len(&tree), 2);
+/// ```
 pub fn tree_len(tree: &impl TreeStore) -> u64 {
     tree.all_pids().len() as u64
 }
