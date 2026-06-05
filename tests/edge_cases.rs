@@ -70,15 +70,23 @@ fn handle_fork_then_exec_then_exit() {
     let tree = TestTree::new();
     let cache = TestCache::new();
     let pid = 5000;
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: pid,
-        parent_pid: 1,
-        timestamp_ns: 100,
-    });
-    handle_event(&tree, &cache, &ProcEvent::Exec {
-        pid,
-        timestamp_ns: 200,
-    });
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: pid,
+            parent_pid: 1,
+            timestamp_ns: 100,
+        },
+    );
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Exec {
+            pid,
+            timestamp_ns: 200,
+        },
+    );
     handle_event(&tree, &cache, &ProcEvent::Exit { pid });
     // Process should still be in tree (preserved for chain lookups)
     assert_eq!(tree_len(&tree), 1);
@@ -91,16 +99,24 @@ fn build_chain_with_cycle() {
     let tree = TestTree::new();
     let cache = TestCache::new();
     // Create a cycle: 1 → 2 → 3 → 1
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: 2,
-        parent_pid: 1,
-        timestamp_ns: 0,
-    });
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: 3,
-        parent_pid: 2,
-        timestamp_ns: 0,
-    });
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: 2,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: 3,
+            parent_pid: 2,
+            timestamp_ns: 0,
+        },
+    );
     // Manually create cycle by re-pointing 1's parent to 3
     // (We can't do this via public API, but we can test that
     //  the chain terminates correctly with real /proc data)
@@ -113,11 +129,15 @@ fn build_chain_with_cycle() {
 fn is_descendant_with_cycle() {
     let tree = TestTree::new();
     let cache = TestCache::new();
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: 2,
-        parent_pid: 1,
-        timestamp_ns: 0,
-    });
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: 2,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
     // Should not infinite loop
     let _ = is_descendant(&tree, 2, "anything");
 }

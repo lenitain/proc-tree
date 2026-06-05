@@ -217,11 +217,15 @@ fn find_by_user_nonexistent() {
 fn fork_creates_tree_node() {
     let tree = TestTree::new();
     let cache = TestCache::new();
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: 500,
-        parent_pid: 1,
-        timestamp_ns: 0,
-    });
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: 500,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
     assert_eq!(tree_len(&tree), 1);
     // After fork, child should be resolvable via chain
     let chain = build_chain_links(&tree, &cache, 500);
@@ -234,11 +238,15 @@ fn fork_multiple_children() {
     let tree = TestTree::new();
     let cache = TestCache::new();
     for i in 600..610 {
-        handle_event(&tree, &cache, &ProcEvent::Fork {
-            child_pid: i,
-            parent_pid: 1,
-            timestamp_ns: 0,
-        });
+        handle_event(
+            &tree,
+            &cache,
+            &ProcEvent::Fork {
+                child_pid: i,
+                parent_pid: 1,
+                timestamp_ns: 0,
+            },
+        );
     }
     assert_eq!(tree_len(&tree), 10);
 }

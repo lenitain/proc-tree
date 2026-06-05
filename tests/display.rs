@@ -54,11 +54,15 @@ fn display_single_process() {
     let tree = TestTree::new();
     let cache = TestCache::new();
     // Manually add a single process via fork
-    handle_event(&tree, &cache, &ProcEvent::Fork {
-        child_pid: 999,
-        parent_pid: 0,
-        timestamp_ns: 0,
-    });
+    handle_event(
+        &tree,
+        &cache,
+        &ProcEvent::Fork {
+            child_pid: 999,
+            parent_pid: 0,
+            timestamp_ns: 0,
+        },
+    );
     let d = display(&tree, 999);
     // Single process display should just be the cmd (or "unknown" if no exec)
     assert!(!d.is_empty());
