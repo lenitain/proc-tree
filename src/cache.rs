@@ -94,16 +94,7 @@ impl ProcCache {
         self.insert(pid, ProcInfo { cmd, user, ppid, tgid, start_time_ns: timestamp_ns });
     }
 
-    /// Insert or update cache entry by reading current `/proc`.
-    pub(crate) fn update_from_proc(&self, pid: u32) {
-        let cmd = read_proc_comm(pid).unwrap_or_else(|| "unknown".to_string());
-        let (user, ppid, tgid) =
-            read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
-        let start_time_ns = read_proc_start_time_ns(pid);
-        self.insert(pid, ProcInfo { cmd, user, ppid, tgid, start_time_ns });
-    }
-
-    /// Insert a pre-built ProcInfo directly.
+/// Insert a pre-built ProcInfo directly.
     pub(crate) fn insert(&self, pid: u32, info: ProcInfo) {
         let mut map = self.inner.lock().unwrap();
         // Evict expired entries if over capacity
@@ -111,16 +102,6 @@ impl ProcCache {
             map.retain(|_, e| e.inserted_at.elapsed() < self.ttl);
         }
         map.insert(pid, CacheEntry { info, inserted_at: Instant::now() });
-    }
-
-    /// Invalidate a cache entry.
-    pub(crate) fn invalidate(&self, pid: u32) {
-        self.inner.lock().unwrap().remove(&pid);
-    }
-
-    /// Check if the cache is empty.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().is_empty()
     }
 
     /// Number of entries in the cache.
@@ -137,7 +118,9 @@ mod tests {
     #[test]
     fn test_insert_and_get() {
         let cache = ProcCache::new(1024, Duration::from_secs(60));
-        cache.update_from_proc(1);
+        // Use a timestamp that matches real PID 1's start time
+        let start_time = crate::proc::read_proc_start_time_ns(1);
+        cache.update_from_exec(1, start_time);
         let info = cache.get(1);
         assert!(info.is_some(), "PID 1 should be cached");
         let info = info.unwrap();
@@ -152,19 +135,10 @@ mod tests {
     }
 
     #[test]
-    fn test_invalidate() {
-        let cache = ProcCache::new(1024, Duration::from_secs(60));
-        cache.update_from_proc(1);
-        assert!(cache.get_unchecked(1).is_some());
-        cache.invalidate(1);
-        assert!(cache.get_unchecked(1).is_none());
-    }
-
-    #[test]
     fn test_len_and_empty() {
         let cache = ProcCache::new(1024, Duration::from_secs(60));
         assert!(cache.get_unchecked(1).is_none(), "should be empty initially");
-        cache.update_from_proc(1);
+        cache.update_from_exec(1, 0);
         assert!(cache.get_unchecked(1).is_some(), "entry should be retrievable");
     }
 }
