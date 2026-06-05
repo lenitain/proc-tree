@@ -10,5 +10,7 @@ categories = ["os", "command-line-utilities"]
 
 [dependencies]
 libc = "0.2"
+compact_str = "0.7"
+arrayvec = "0.7"
 
 [dev-dependencies]

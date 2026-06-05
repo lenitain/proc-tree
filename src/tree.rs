@@ -13,6 +13,8 @@ use std::fmt;
 use std::sync::Mutex;
 use std::time::Duration;
 
+use compact_str::CompactString;
+
 use crate::cache::{ProcCache, ProcInfo};
 use crate::proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields};
 
@@ -54,7 +56,7 @@ pub(crate) struct PidNode {
     /// Parent PID. 0 for PID 1 (init).
     pub ppid: u32,
     /// Command name. Empty after Fork, filled on Exec or snapshot.
-    pub cmd: String,
+    pub cmd: CompactString,
 }
 
 // ---- ProcessLink (structured chain element) ----
@@ -74,8 +76,8 @@ pub(crate) struct PidNode {
 #[derive(Debug, Clone)]
 pub struct ProcessLink {
     pub pid: u32,
-    pub cmd: String,
-    pub user: String,
+    pub cmd: CompactString,
+    pub user: CompactString,
 }
 
 impl fmt::Display for ProcessLink {
@@ -223,22 +225,22 @@ impl ProcTree {
                 Err(_) => continue,
             };
             let mut ppid = 0u32;
-            let mut cmd = String::new();
-            let mut user = String::new();
+            let mut cmd = CompactString::new("");
+            let mut user = CompactString::new("");
             let mut tgid = 0u32;
             for line in status.lines() {
                 if let Some(val) = line.strip_prefix("PPid:") {
                     ppid = val.trim().parse().unwrap_or(0);
                 } else if let Some(val) = line.strip_prefix("Name:") {
-                    cmd = val.trim().to_string();
+                    cmd = CompactString::new(val.trim());
                 } else if let Some(val) = line.strip_prefix("Uid:") {
                     if let Some(uid_str) = val.split_whitespace().next()
                         && let Ok(uid) = uid_str.parse::<u32>()
                     {
-                        user =
-                            crate::proc::uid_to_username(uid).unwrap_or_else(|| "unknown".into());
+                        user = crate::proc::uid_to_username(uid)
+                            .unwrap_or_else(|| CompactString::new("unknown"));
                     } else {
-                        user = "unknown".into();
+                        user = CompactString::new("unknown");
                     }
                 } else if let Some(val) = line.strip_prefix("Tgid:") {
                     tgid = val.trim().parse().unwrap_or(0);
@@ -300,14 +302,14 @@ impl ProcTree {
                     *child_pid,
                     PidNode {
                         ppid: *parent_pid,
-                        cmd: String::new(),
+                        cmd: CompactString::new(""),
                     },
                 );
             }
             ProcEvent::Exec { pid, timestamp_ns } => {
-                let cmd = read_proc_comm(*pid).unwrap_or_else(|| "unknown".to_string());
-                let (_user, ppid, _tgid) =
-                    read_proc_status_fields(*pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+                let cmd = read_proc_comm(*pid).unwrap_or_else(|| CompactString::new("unknown"));
+                let (_user, ppid, _tgid) = read_proc_status_fields(*pid)
+                    .unwrap_or_else(|| (CompactString::new("unknown"), 0, 0));
                 // Update tree
                 self.tree.lock().unwrap().insert(
                     *pid,
@@ -349,8 +351,8 @@ impl ProcTree {
         }
         // Fallback: read /proc directly
         let cmd = read_proc_comm(pid)?;
-        let (user, ppid, tgid) =
-            read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+        let (user, ppid, tgid) = read_proc_status_fields(pid)
+            .unwrap_or_else(|| (CompactString::new("unknown"), 0, 0));
         let start_time_ns = read_proc_start_time_ns(pid);
         let info = ProcInfo {
             cmd,
@@ -399,14 +401,14 @@ impl ProcTree {
                 // Fallback: read from /proc
                 match read_proc_status_fields(current) {
                     Some((_, p, _)) => {
-                        let c = read_proc_comm(current).unwrap_or_else(|| "unknown".into());
+                        let c = read_proc_comm(current).unwrap_or_else(|| CompactString::new("unknown"));
                         (p, c)
                     }
                     None => {
                         parts.push(ProcessLink {
                             pid: current,
-                            cmd: "unknown".into(),
-                            user: "unknown".into(),
+                            cmd: CompactString::new("unknown"),
+                            user: CompactString::new("unknown"),
                         });
                         break;
                     }
@@ -419,7 +421,7 @@ impl ProcTree {
                 .get_unchecked(current)
                 .map(|info| info.user)
                 .or_else(|| read_proc_status_fields(current).map(|(u, _, _)| u))
-                .unwrap_or_else(|| "unknown".to_string());
+                .unwrap_or_else(|| CompactString::new("unknown"));
 
             parts.push(ProcessLink {
                 pid: current,
@@ -608,9 +610,9 @@ impl ProcTree {
             .map(|n| n.cmd.clone())
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(root_pid))
-            .unwrap_or_else(|| "unknown".into());
+            .unwrap_or_else(|| CompactString::new("unknown"));
         drop(tree);
-        let mut output = cmd;
+        let mut output = String::from(cmd.as_str());
         let kids = self.children(root_pid);
         if kids.is_empty() {
             return output;
@@ -644,9 +646,9 @@ impl ProcTree {
             .map(|n| n.cmd.clone())
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(pid))
-            .unwrap_or_else(|| "unknown".into());
+            .unwrap_or_else(|| CompactString::new("unknown"));
         drop(tree);
-        let mut output = cmd;
+        let mut output = String::from(cmd.as_str());
         let kids = self.children(pid);
         if kids.is_empty() {
             return output;
@@ -752,7 +754,7 @@ mod tests {
             102,
             PidNode {
                 ppid: 101,
-                cmd: String::new(), // Fork, no Exec yet
+                cmd: CompactString::new(""), // Fork, no Exec yet
             },
         );
 

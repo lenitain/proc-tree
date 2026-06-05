@@ -7,15 +7,20 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use compact_str::CompactString;
+
 use crate::proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields};
 
 /// Cached process info for a single PID.
+///
+/// Uses [`CompactString`] for `cmd` and `user` to avoid heap allocation
+/// for short strings (most process names and usernames are <23 bytes).
 #[derive(Clone, Debug)]
 pub struct ProcInfo {
     /// Command name (from `/proc/{pid}/comm`).
-    pub cmd: String,
+    pub cmd: CompactString,
     /// Username (from UID lookup via `/etc/passwd`).
-    pub user: String,
+    pub user: CompactString,
     /// Parent PID.
     pub ppid: u32,
     /// Thread group ID.
@@ -87,9 +92,9 @@ impl ProcCache {
 
     /// Insert or update cache entry from an Exec event.
     pub(crate) fn update_from_exec(&self, pid: u32, timestamp_ns: u64) {
-        let cmd = read_proc_comm(pid).unwrap_or_else(|| "unknown".to_string());
+        let cmd = read_proc_comm(pid).unwrap_or_else(|| CompactString::new("unknown"));
         let (user, ppid, tgid) =
-            read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+            read_proc_status_fields(pid).unwrap_or_else(|| (CompactString::new("unknown"), 0, 0));
         self.insert(
             pid,
             ProcInfo {
