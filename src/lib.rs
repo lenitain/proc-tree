@@ -51,11 +51,11 @@
 
 mod cache;
 mod default_store;
+mod ops;
 pub mod proc;
 mod traits;
-mod types;
 mod tree;
-mod ops;
+mod types;
 
 // Public API — types
 pub use cache::ProcInfo;
@@ -73,7 +73,8 @@ pub use tree::{ProcEvent, ProcessLink};
 // Public API — operations
 pub use ops::{
     build_chain_links, build_chain_string, children, descendants, display, find_by_cmd,
-    find_by_user, handle_event, handle_events, is_descendant, resolve, siblings, snapshot, tree_len,
+    find_by_user, handle_event, handle_events, is_descendant, resolve, siblings, snapshot,
+    tree_len,
 };
 
 // Public API — proc utilities

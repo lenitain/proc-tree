@@ -181,8 +181,17 @@ pub fn parse_proc_entry(pid: u32) -> Option<(crate::types::PidNode, crate::types
     }
     let start_time_ns = read_proc_start_time_ns(pid);
     Some((
-        crate::types::PidNode { ppid, cmd: cmd.clone() },
-        crate::types::ProcInfo { cmd, user, ppid, tgid, start_time_ns },
+        crate::types::PidNode {
+            ppid,
+            cmd: cmd.clone(),
+        },
+        crate::types::ProcInfo {
+            cmd,
+            user,
+            ppid,
+            tgid,
+            start_time_ns,
+        },
     ))
 }
 

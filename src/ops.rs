@@ -5,8 +5,8 @@
 
 use crate::cache::ProcInfo;
 use crate::traits::{CacheStore, TreeStore};
-use crate::types::PidNode;
 use crate::tree::{ProcEvent, ProcessLink};
+use crate::types::PidNode;
 
 /// Snapshot all running processes from `/proc`.
 ///
@@ -482,16 +482,40 @@ mod tests {
     #[test]
     fn display_single_node() {
         let tree = DefaultTree::new(100, 0);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
         assert_eq!(display(&tree, 1), "init");
     }
 
     #[test]
     fn display_root_with_children() {
         let tree = DefaultTree::new(100, 0);
-        tree.insert_node(1, PidNode { ppid: 0, cmd: "init".into() });
-        tree.insert_node(100, PidNode { ppid: 1, cmd: "a".into() });
-        tree.insert_node(200, PidNode { ppid: 1, cmd: "b".into() });
+        tree.insert_node(
+            1,
+            PidNode {
+                ppid: 0,
+                cmd: "init".into(),
+            },
+        );
+        tree.insert_node(
+            100,
+            PidNode {
+                ppid: 1,
+                cmd: "a".into(),
+            },
+        );
+        tree.insert_node(
+            200,
+            PidNode {
+                ppid: 1,
+                cmd: "b".into(),
+            },
+        );
         let d = display(&tree, 1);
         assert!(d.starts_with("init"));
         assert!(d.contains("a"));
