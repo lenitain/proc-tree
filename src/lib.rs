@@ -50,12 +50,14 @@
 //! with the current `/proc` value to detect reuse.
 
 mod cache;
+mod default_store;
 pub mod proc;
 mod traits;
 mod tree;
 
 // Public API — traits and types
 pub use cache::ProcInfo;
+pub use default_store::{DefaultCache, DefaultTree};
 pub use proc::read_proc_start_time_ns;
 pub use traits::{
     CacheStore, PidNode, TreeStore, build_chain_links, build_chain_string, children, descendants,
