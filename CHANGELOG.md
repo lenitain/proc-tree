@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-06-06
+
+### Changed
+
+- **Unified `/proc` reading layer**: removed `read_proc_status_fields()`, all `/proc/status` parsing now goes through `parse_proc_entry()`
+- **Simplified `display()`**: split into `display()` (root) and `display_subtree()` (recursive), eliminated `is_root` parameter
+- **Extracted `get_cmd()` helper**: shared command name resolution with fallback chain (tree → /proc → "unknown")
+- **Removed `cache.rs`**: eliminated unnecessary re-export module, `ProcInfo` now exported directly from `types`
+- **Simplified `resolve()`**: uses `parse_proc_entry()` directly instead of separate field reads
+- **Simplified `handle_event()`**: Exec handler uses `parse_proc_entry()` for cleaner code
+- **Simplified `build_chain_links()`**: uses `parse_proc_entry()` instead of separate `/proc` reads
+
+### Removed
+
+- **`read_proc_status_fields()`**: redundant with `parse_proc_entry()`, removed to eliminate duplicate parsing
+- **`cache` module**: was only a re-export of `ProcInfo` from `types`
+
+### Fixed
+
+- **Code quality**: thermo-nuclear review fixes for structural simplification
+
 ## [0.1.0] - 2026-06-05
 
 ### Added
