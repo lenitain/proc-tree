@@ -28,7 +28,10 @@ fn resolve_pid1_is_init() {
 #[test]
 fn resolve_nonexistent_pid() {
     let tree = ProcTree::builder().build();
-    assert!(tree.resolve(0x7FFFFFFF).is_none(), "nonexistent PID should return None");
+    assert!(
+        tree.resolve(0x7FFFFFFF).is_none(),
+        "nonexistent PID should return None"
+    );
 }
 
 #[test]

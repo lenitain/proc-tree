@@ -9,7 +9,10 @@ fn snapshot_populates_tree() {
     let mut tree = ProcTree::builder().build();
     assert_eq!(tree.tree_len(), 0);
     tree.snapshot();
-    assert!(tree.tree_len() > 0, "tree should have entries after snapshot");
+    assert!(
+        tree.tree_len() > 0,
+        "tree should have entries after snapshot"
+    );
 }
 
 #[test]
@@ -60,7 +63,10 @@ fn build_chain_nonexistent() {
     let chain = tree.build_chain(0x7FFFFFFF);
     // Nonexistent PID returns a chain with "unknown" entries (not empty)
     // because build_chain falls back to /proc reading which fails gracefully
-    assert!(chain.len() <= 1, "nonexistent PID should have minimal chain");
+    assert!(
+        chain.len() <= 1,
+        "nonexistent PID should have minimal chain"
+    );
 }
 
 #[test]
@@ -77,7 +83,10 @@ fn build_chain_string_current_process() {
     tree.snapshot();
     let my_pid = std::process::id();
     let s = tree.build_chain_string(my_pid);
-    assert!(s.contains(&format!("{}|", my_pid)), "should start with current PID");
+    assert!(
+        s.contains(&format!("{}|", my_pid)),
+        "should start with current PID"
+    );
 }
 
 // ---- is_descendant ----

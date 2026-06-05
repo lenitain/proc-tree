@@ -11,7 +11,10 @@ fn cache_populated_after_snapshot() {
         .build();
     assert_eq!(tree.cache_len(), 0, "cache should be empty before snapshot");
     tree.snapshot();
-    assert!(tree.cache_len() > 0, "cache should be populated after snapshot");
+    assert!(
+        tree.cache_len() > 0,
+        "cache should be populated after snapshot"
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 //! Test helper functions for proc-tree tests.
 
-use proc_tree::{ProcTree, ProcEvent};
+use proc_tree::{ProcEvent, ProcTree};
 
 /// Build a tree using events (public API only).
 ///
