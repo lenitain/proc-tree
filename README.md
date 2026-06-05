@@ -21,6 +21,17 @@ println!("PID 1: {} ({})", info.cmd, info.user);
 let chain = build_chain_string(&tree, &cache, std::process::id());
 ```
 
+## Module structure
+
+| Module | Purpose |
+|--------|---------|
+| `types` | `PidNode`, `ProcInfo` data types |
+| `traits` | `TreeStore`, `CacheStore` trait definitions |
+| `ops` | All algorithms: `snapshot`, `resolve`, `display`, `children`, etc. |
+| `proc` | Raw `/proc` reading: `parse_proc_entry`, `read_proc_comm`, `uid_to_username` |
+| `tree` | `ProcEvent`, `ProcessLink` types |
+| `default_store` | `DefaultStore<V>`, `DefaultTree`, `DefaultCache` |
+
 ## Custom backend
 
 Implement `TreeStore` and `CacheStore` for any storage (Redis, moka, dashmap, ...). See [docs.rs](https://docs.rs/proc-tree) for the trait definitions.
