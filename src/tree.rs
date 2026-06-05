@@ -443,10 +443,10 @@ impl ProcTree {
                         }
                     } else {
                         // Fallback: read ppid from /proc
-                        if let Some((_, ppid, _)) = read_proc_status_fields(child_pid) {
-                            if ppid == pid {
-                                result.push(child_pid);
-                            }
+                        if let Some((_, ppid, _)) = read_proc_status_fields(child_pid)
+                            && ppid == pid
+                        {
+                            result.push(child_pid);
                         }
                     }
                 }
@@ -552,7 +552,7 @@ impl ProcTree {
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(root_pid))
             .unwrap_or_else(|| "unknown".into());
-        let mut output = format!("{}", cmd);
+        let mut output = cmd;
         let kids = self.children(root_pid);
         if kids.is_empty() {
             return output;
@@ -587,7 +587,7 @@ impl ProcTree {
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(pid))
             .unwrap_or_else(|| "unknown".into());
-        let mut output = format!("{}", cmd);
+        let mut output = cmd;
         let kids = self.children(pid);
         if kids.is_empty() {
             return output;
