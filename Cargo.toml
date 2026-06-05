@@ -4,9 +4,23 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Linux process tree: snapshot, incremental maintenance via fork/exec events, ancestry chain queries, PID reuse detection"
+documentation = "https://docs.rs/proc-tree"
 repository = "https://github.com/lenitain/proc-tree"
+readme = "README.md"
 keywords = ["linux", "process", "tree", "proc", "pid"]
 categories = ["os", "command-line-utilities"]
+authors = ["lenitain <xt.zhu@qq.com>"]
+
+include = [
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "src/",
+]
+
+[lib]
+name = "proc_tree"
+path = "src/lib.rs"
 
 [dependencies]
 libc = "0.2"
