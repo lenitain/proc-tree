@@ -27,4 +27,4 @@ Implement `TreeStore` and `CacheStore` for any storage (Redis, moka, dashmap, ..
 
 ## License
 
-[MIT](./LICENSE)
+[MIT LICENSE](./LICENSE)
