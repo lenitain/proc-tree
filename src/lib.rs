@@ -50,7 +50,7 @@
 //! with the current `/proc` value to detect reuse.
 
 mod cache;
-mod proc;
+pub mod proc;
 mod traits;
 mod tree;
 
