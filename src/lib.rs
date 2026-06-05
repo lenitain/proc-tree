@@ -56,6 +56,7 @@ mod tree;
 
 // Public API
 pub use cache::ProcInfo;
+pub use proc::read_proc_start_time_ns;
 pub use tree::{ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
