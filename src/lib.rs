@@ -54,8 +54,8 @@ mod cache;
 mod proc;
 mod tree;
 
-// Public API — only types users actually need.
-pub use cache::{ProcCache, ProcInfo};
+// Public API
+pub use cache::ProcInfo;
 pub use tree::{PidNode, ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
@@ -79,12 +79,12 @@ mod tests {
         assert!(s.contains("1|"));
     }
 
-    /// Test that ProcCache can be used standalone
+    /// Test that resolve works standalone
     #[test]
-    fn test_standalone_cache() {
-        let cache = ProcCache::new(1024, std::time::Duration::from_secs(60));
-        cache.update_from_proc(1);
-        let info = cache.get(1).expect("PID 1 should be cached");
+    fn test_standalone_resolve() {
+        let mut tree = ProcTree::builder().build();
+        tree.snapshot();
+        let info = tree.resolve(1).expect("PID 1 should be resolvable");
         assert_eq!(info.ppid, 0);
     }
 }

@@ -29,20 +29,7 @@ pub struct ProcInfo {
 ///
 /// Thread-safe (backed by `moka::sync::Cache`). Entries are evicted
 /// automatically after `ttl` or when capacity is reached (W-TinyLFU).
-///
-/// # Usage
-///
-/// ```rust
-/// use proc_tree::ProcCache;
-/// use std::time::Duration;
-///
-/// let cache = ProcCache::new(65536, Duration::from_secs(600));
-/// cache.update_from_proc(1); // read from /proc
-/// if let Some(info) = cache.get(1) {
-///     println!("PID 1: cmd={}, user={}", info.cmd, info.user);
-/// }
-/// ```
-pub struct ProcCache {
+pub(crate) struct ProcCache {
     inner: Cache<u32, ProcInfo>,
 }
 
