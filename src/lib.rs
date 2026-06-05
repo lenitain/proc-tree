@@ -50,13 +50,12 @@
 //! ]);
 //! ```
 
-pub mod cache;
-pub mod proc;
-pub mod tree;
+mod cache;
+mod proc;
+mod tree;
 
-// Re-export main types at crate root for convenience.
+// Public API — only types users actually need.
 pub use cache::{ProcCache, ProcInfo};
-pub use proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields, uid_to_username};
 pub use tree::{PidNode, ProcEvent, ProcTree, ProcTreeBuilder, ProcessLink};
 
 #[cfg(test)]
@@ -69,16 +68,13 @@ mod tests {
         let mut tree = ProcTree::builder().build();
         tree.snapshot();
 
-        // PID 1 should always resolve
         let info = tree.resolve(1).expect("PID 1 should exist");
         assert!(!info.cmd.is_empty());
 
-        // Build chain for PID 1
         let chain = tree.build_chain(1);
         assert!(!chain.is_empty());
         assert_eq!(chain.last().unwrap().pid, 1);
 
-        // Chain string format
         let s = tree.build_chain_string(1);
         assert!(s.contains("1|"));
     }
@@ -90,21 +86,5 @@ mod tests {
         cache.update_from_proc(1);
         let info = cache.get(1).expect("PID 1 should be cached");
         assert_eq!(info.ppid, 0);
-    }
-
-    /// Test that proc module functions work standalone
-    #[test]
-    fn test_standalone_proc() {
-        let comm = proc::read_proc_comm(1);
-        assert!(comm.is_some());
-
-        let fields = proc::read_proc_status_fields(1);
-        assert!(fields.is_some());
-
-        let start = proc::read_proc_start_time_ns(1);
-        assert!(start > 0);
-
-        let user = proc::uid_to_username(0);
-        assert_eq!(user.as_deref(), Some("root"));
     }
 }
