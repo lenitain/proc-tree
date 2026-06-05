@@ -8,11 +8,10 @@
 //! - **Ancestry queries**: build process chain, check descendants
 //! - **PID reuse detection**: via start_time_ns comparison
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::sync::Mutex;
 use std::time::Duration;
-
-use moka::sync::Cache;
 
 use crate::cache::{ProcCache, ProcInfo};
 use crate::proc::{read_proc_comm, read_proc_start_time_ns, read_proc_status_fields};
@@ -126,11 +125,8 @@ impl ProcTreeBuilder {
     /// Build the [`ProcTree`].
     pub fn build(self) -> ProcTree {
         ProcTree {
-            tree: Cache::builder()
-                .max_capacity(self.tree_capacity)
-                .time_to_live(self.tree_ttl)
-                .build(),
-            cache: ProcCache::new(self.cache_capacity, self.cache_ttl),
+            tree: Mutex::new(HashMap::with_capacity(self.tree_capacity as usize)),
+            cache: ProcCache::new(self.cache_capacity as usize, self.cache_ttl),
         }
     }
 }
@@ -163,9 +159,9 @@ impl ProcTreeBuilder {
 /// }
 /// ```
 pub struct ProcTree {
-    /// PID → tree node (ppid, cmd, start_time).
-    tree: Cache<u32, PidNode>,
-    /// PID → process info (cmd, user, ppid, tgid, start_time).
+    /// PID → tree node (ppid, cmd).
+    tree: Mutex<HashMap<u32, PidNode>>,
+    /// PID → process info (cmd, user, ppid, tgid, start_time_ns).
     cache: ProcCache,
 }
 
@@ -221,7 +217,7 @@ impl ProcTree {
                 }
             }
             let start_time_ns = read_proc_start_time_ns(pid);
-            self.tree.insert(
+            self.tree.lock().unwrap().insert(
                 pid,
                 PidNode {
                     ppid,
@@ -230,7 +226,7 @@ impl ProcTree {
             );
             // Directly insert into cache (skip ProcCache::update_from_proc to
             // avoid re-reading /proc — we already have all the data).
-            self.cache.insert_raw(
+            self.cache.insert(
                 pid,
                 ProcInfo {
                     cmd,
@@ -262,7 +258,7 @@ impl ProcTree {
                 timestamp_ns: _,
             } => {
                 // Pre-populate tree: we know the parent but not cmd yet.
-                self.tree.insert(
+                self.tree.lock().unwrap().insert(
                     *child_pid,
                     PidNode {
                         ppid: *parent_pid,
@@ -275,7 +271,7 @@ impl ProcTree {
                 let (_user, ppid, _tgid) =
                     read_proc_status_fields(*pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
                 // Update tree
-                self.tree.insert(
+                self.tree.lock().unwrap().insert(
                     *pid,
                     PidNode {
                         ppid,
@@ -288,7 +284,7 @@ impl ProcTree {
             ProcEvent::Exit { .. } => {
                 // Keep the node — still valid for historical chain lookups
                 // of events that happened before this process exited.
-                // Memory is managed by moka TTL.
+                // Memory is managed by cache TTL.
             }
         }
     }
@@ -315,7 +311,7 @@ impl ProcTree {
             start_time_ns,
         };
         // Populate cache for future lookups
-        self.cache.insert_raw(pid, info.clone());
+        self.cache.insert(pid, info.clone());
         Some(info)
     }
 
@@ -337,7 +333,7 @@ impl ProcTree {
             }
 
             // Get ppid and cmd from tree
-            let (ppid, cmd) = if let Some(node) = self.tree.get(&current) {
+            let (ppid, cmd) = if let Some(node) = self.tree.lock().unwrap().get(&current) {
                 (node.ppid, node.cmd.clone())
             } else {
                 // Fallback: read from /proc
@@ -400,7 +396,7 @@ impl ProcTree {
     pub fn is_descendant(&self, pid: u32, target_cmd: &str) -> bool {
         let mut current = pid;
         let mut visited = HashSet::new();
-        while let Some(node) = self.tree.get(&current) {
+        while let Some(node) = self.tree.lock().unwrap().get(&current) {
             if !visited.insert(current) {
                 break; // cycle detected
             }
@@ -419,7 +415,7 @@ impl ProcTree {
     ///
     /// Scans the tree for all nodes whose ppid matches the given pid.
     pub fn children(&self, pid: u32) -> Vec<u32> {
-        // moka doesn't support iteration, so we read from /proc
+        // HashMap doesn.t support iteration, so we read from /proc
         // and check the tree for parent relationship.
         let mut result = Vec::new();
         if let Ok(dir) = std::fs::read_dir("/proc") {
@@ -427,7 +423,7 @@ impl ProcTree {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
                 if let Ok(child_pid) = name_str.parse::<u32>() {
-                    if let Some(node) = self.tree.get(&child_pid) {
+                    if let Some(node) = self.tree.lock().unwrap().get(&child_pid) {
                         if node.ppid == pid {
                             result.push(child_pid);
                         }
@@ -466,7 +462,7 @@ impl ProcTree {
     ///
     /// Excludes the given pid itself.
     pub fn siblings(&self, pid: u32) -> Vec<u32> {
-        let ppid = match self.tree.get(&pid) {
+        let ppid = match self.tree.lock().unwrap().get(&pid) {
             Some(node) => node.ppid,
             None => match read_proc_status_fields(pid) {
                 Some((_, p, _)) => p,
@@ -487,7 +483,7 @@ impl ProcTree {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
                 if let Ok(pid) = name_str.parse::<u32>() {
-                    let cmd = if let Some(node) = self.tree.get(&pid) {
+                    let cmd = if let Some(node) = self.tree.lock().unwrap().get(&pid) {
                         if !node.cmd.is_empty() {
                             Some(node.cmd.clone())
                         } else {
@@ -535,13 +531,14 @@ impl ProcTree {
     ///         └─nginx───worker
     /// ```
     pub fn display(&self, root_pid: u32) -> String {
-        let cmd = self
-            .tree
+        let tree = self.tree.lock().unwrap();
+        let cmd = tree
             .get(&root_pid)
             .map(|n| n.cmd.clone())
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(root_pid))
             .unwrap_or_else(|| "unknown".into());
+        drop(tree);
         let mut output = cmd;
         let kids = self.children(root_pid);
         if kids.is_empty() {
@@ -570,13 +567,14 @@ impl ProcTree {
     }
 
     fn display_inner(&self, pid: u32) -> String {
-        let cmd = self
-            .tree
+        let tree = self.tree.lock().unwrap();
+        let cmd = tree
             .get(&pid)
             .map(|n| n.cmd.clone())
             .filter(|c| !c.is_empty())
             .or_else(|| read_proc_comm(pid))
             .unwrap_or_else(|| "unknown".into());
+        drop(tree);
         let mut output = cmd;
         let kids = self.children(pid);
         if kids.is_empty() {
@@ -606,12 +604,12 @@ impl ProcTree {
 
     /// Get the number of entries in the process tree.
     pub fn tree_len(&self) -> u64 {
-        self.tree.entry_count()
+        self.tree.lock().unwrap().len() as u64
     }
 
     /// Get the number of entries in the process info cache.
     pub fn cache_len(&self) -> u64 {
-        self.cache.len()
+        self.cache.len() as u64
     }
 }
 
@@ -658,28 +656,28 @@ mod tests {
         let tree = ProcTree::builder().build();
         // Manually build a small tree:
         // PID 1 (systemd) → PID 100 (bash) → PID 101 (sh) → PID 102 (touch)
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             1,
             PidNode {
                 ppid: 0,
                 cmd: "systemd".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             100,
             PidNode {
                 ppid: 1,
                 cmd: "bash".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             101,
             PidNode {
                 ppid: 100,
                 cmd: "sh".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             102,
             PidNode {
                 ppid: 101,
@@ -698,21 +696,21 @@ mod tests {
     fn test_is_descendant_cycle() {
         let tree = ProcTree::builder().build();
         // A→B→C→A cycle
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             1,
             PidNode {
                 ppid: 2,
                 cmd: "a".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             2,
             PidNode {
                 ppid: 3,
                 cmd: "b".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             3,
             PidNode {
                 ppid: 1,
@@ -726,21 +724,21 @@ mod tests {
     #[test]
     fn test_build_chain_with_cycle() {
         let tree = ProcTree::builder().build();
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             1,
             PidNode {
                 ppid: 2,
                 cmd: "a".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             2,
             PidNode {
                 ppid: 3,
                 cmd: "b".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             3,
             PidNode {
                 ppid: 1,
@@ -760,7 +758,7 @@ mod tests {
             parent_pid: 100,
             timestamp_ns: 12345,
         });
-        let node = tree.tree.get(&200);
+        let node = tree.tree.lock().unwrap().get(&200).cloned();
         assert!(node.is_some());
         let node = node.unwrap();
         assert_eq!(node.ppid, 100);
@@ -813,28 +811,28 @@ mod tests {
     fn test_siblings() {
         // Use high PIDs unlikely to exist on the system
         let tree = ProcTree::builder().build();
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             500000,
             PidNode {
                 ppid: 0,
                 cmd: "init".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             500001,
             PidNode {
                 ppid: 500000,
                 cmd: "a".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             500002,
             PidNode {
                 ppid: 500000,
                 cmd: "b".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             500003,
             PidNode {
                 ppid: 500000,
@@ -844,7 +842,7 @@ mod tests {
         // children() scans /proc — these high PIDs won't exist, so use
         // the tree-only path by testing siblings of a real PID instead.
         // Instead, verify the ppid lookup logic works.
-        let node = tree.tree.get(&500001).unwrap();
+        let node = tree.tree.lock().unwrap().get(&500001).cloned().unwrap();
         assert_eq!(node.ppid, 500000);
     }
 
@@ -861,21 +859,21 @@ mod tests {
     #[test]
     fn test_display() {
         let tree = ProcTree::builder().build();
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             1,
             PidNode {
                 ppid: 0,
                 cmd: "init".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             100,
             PidNode {
                 ppid: 1,
                 cmd: "bash".into(),
             },
         );
-        tree.tree.insert(
+        tree.tree.lock().unwrap().insert(
             101,
             PidNode {
                 ppid: 1,

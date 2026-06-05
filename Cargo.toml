@@ -9,7 +9,6 @@ keywords = ["linux", "process", "tree", "proc", "pid"]
 categories = ["os", "command-line-utilities"]
 
 [dependencies]
-moka = { version = "0.12", features = ["sync"] }
 libc = "0.2"
 
 [dev-dependencies]
