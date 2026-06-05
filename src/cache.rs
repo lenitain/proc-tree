@@ -39,7 +39,6 @@ pub(crate) struct ProcCache {
     capacity: usize,
 }
 
-
 impl ProcCache {
     /// Create a new cache with the given capacity and TTL.
     pub(crate) fn new(capacity: usize, ttl: Duration) -> Self {
@@ -91,17 +90,32 @@ impl ProcCache {
         let cmd = read_proc_comm(pid).unwrap_or_else(|| "unknown".to_string());
         let (user, ppid, tgid) =
             read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
-        self.insert(pid, ProcInfo { cmd, user, ppid, tgid, start_time_ns: timestamp_ns });
+        self.insert(
+            pid,
+            ProcInfo {
+                cmd,
+                user,
+                ppid,
+                tgid,
+                start_time_ns: timestamp_ns,
+            },
+        );
     }
 
-/// Insert a pre-built ProcInfo directly.
+    /// Insert a pre-built ProcInfo directly.
     pub(crate) fn insert(&self, pid: u32, info: ProcInfo) {
         let mut map = self.inner.lock().unwrap();
         // Evict expired entries if over capacity
         if map.len() >= self.capacity {
             map.retain(|_, e| e.inserted_at.elapsed() < self.ttl);
         }
-        map.insert(pid, CacheEntry { info, inserted_at: Instant::now() });
+        map.insert(
+            pid,
+            CacheEntry {
+                info,
+                inserted_at: Instant::now(),
+            },
+        );
     }
 
     /// Number of entries in the cache.
@@ -137,8 +151,14 @@ mod tests {
     #[test]
     fn test_len_and_empty() {
         let cache = ProcCache::new(1024, Duration::from_secs(60));
-        assert!(cache.get_unchecked(1).is_none(), "should be empty initially");
+        assert!(
+            cache.get_unchecked(1).is_none(),
+            "should be empty initially"
+        );
         cache.update_from_exec(1, 0);
-        assert!(cache.get_unchecked(1).is_some(), "entry should be retrievable");
+        assert!(
+            cache.get_unchecked(1).is_some(),
+            "entry should be retrievable"
+        );
     }
 }
