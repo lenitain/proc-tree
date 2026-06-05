@@ -64,18 +64,8 @@ pub fn resolve(cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
     if let Some(info) = cache.get_info(pid) {
         return Some(info);
     }
-    // Fallback: read /proc directly
-    let cmd = crate::proc::read_proc_comm(pid)?;
-    let (user, ppid, tgid) =
-        crate::proc::read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
-    let start_time_ns = crate::proc::read_proc_start_time_ns(pid);
-    let info = ProcInfo {
-        cmd,
-        user,
-        ppid,
-        tgid,
-        start_time_ns,
-    };
+    // Fallback: read /proc directly via parse_proc_entry
+    let (_node, info) = crate::proc::parse_proc_entry(pid)?;
     // Populate cache for future lookups
     cache.insert_info(pid, info.clone());
     Some(info)
@@ -119,26 +109,11 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &Proc
             );
         }
         ProcEvent::Exec { pid, timestamp_ns } => {
-            let cmd = crate::proc::read_proc_comm(*pid).unwrap_or_else(|| "unknown".to_string());
-            let (user, ppid, tgid) = crate::proc::read_proc_status_fields(*pid)
-                .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
-            tree.insert_node(
-                *pid,
-                PidNode {
-                    ppid,
-                    cmd: cmd.clone(),
-                },
-            );
-            cache.insert_info(
-                *pid,
-                ProcInfo {
-                    cmd,
-                    user,
-                    ppid,
-                    tgid,
-                    start_time_ns: *timestamp_ns,
-                },
-            );
+            if let Some((node, mut info)) = crate::proc::parse_proc_entry(*pid) {
+                info.start_time_ns = *timestamp_ns;
+                tree.insert_node(*pid, node);
+                cache.insert_info(*pid, info);
+            }
         }
         ProcEvent::Exit { .. } => {
             // Keep the node — still valid for historical chain lookups
@@ -198,22 +173,15 @@ pub fn build_chain_links(
                 .map(|info| info.user)
                 .unwrap_or_else(|| "unknown".to_string());
             (node.ppid, node.cmd, user)
+        } else if let Some((node, info)) = crate::proc::parse_proc_entry(current) {
+            (node.ppid, node.cmd, info.user)
         } else {
-            match crate::proc::read_proc_status_fields(current) {
-                Some((u, p, _)) => {
-                    let c = crate::proc::read_proc_comm(current)
-                        .unwrap_or_else(|| "unknown".to_string());
-                    (p, c, u)
-                }
-                None => {
-                    parts.push(ProcessLink {
-                        pid: current,
-                        cmd: "unknown".to_string(),
-                        user: "unknown".to_string(),
-                    });
-                    break;
-                }
-            }
+            parts.push(ProcessLink {
+                pid: current,
+                cmd: "unknown".to_string(),
+                user: "unknown".to_string(),
+            });
+            break;
         };
         parts.push(ProcessLink {
             pid: current,
@@ -393,7 +361,7 @@ pub fn find_by_user(tree: &impl TreeStore, cache: &impl CacheStore, target_user:
             let user = cache
                 .get_info(pid)
                 .map(|info| info.user)
-                .or_else(|| crate::proc::read_proc_status_fields(pid).map(|(u, _, _)| u));
+                .or_else(|| crate::proc::parse_proc_entry(pid).map(|(_, info)| info.user));
             user.as_deref() == Some(target_user)
         })
         .collect()

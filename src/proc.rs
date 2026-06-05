@@ -52,35 +52,7 @@ fn proc_path(pid: u32, suffix: &str) -> ArrayString<32> {
     buf
 }
 
-/// Read user, ppid, tgid from `/proc/{pid}/status` in one pass.
-///
-/// Returns `None` if the process doesn't exist or parsing fails.
-///
-/// ```no_run
-/// use proc_tree::proc::read_proc_status_fields;
-///
-/// let (user, ppid, tgid) = read_proc_status_fields(1).unwrap();
-/// assert_eq!(user, "root");
-/// assert_eq!(ppid, 0); // PID 1 has no parent
-/// ```
-pub fn read_proc_status_fields(pid: u32) -> Option<(String, u32, u32)> {
-    let path = proc_path(pid, "status");
-    let status = std::fs::read_to_string(path.as_str()).ok()?;
-    let mut user = String::new();
-    let mut ppid = 0u32;
-    let mut tgid = 0u32;
-    for line in status.lines() {
-        if let Some(val) = line.strip_prefix("Uid:") {
-            let uid: u32 = val.split_whitespace().next()?.parse().ok()?;
-            user = uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
-        } else if let Some(val) = line.strip_prefix("PPid:") {
-            ppid = val.trim().parse().ok()?;
-        } else if let Some(val) = line.strip_prefix("Tgid:") {
-            tgid = val.trim().parse().ok()?;
-        }
-    }
-    Some((user, ppid, tgid))
-}
+
 
 /// Read the process start time in nanoseconds from `/proc/{pid}/stat`.
 ///
@@ -226,15 +198,7 @@ mod tests {
         assert!(read_proc_comm(0x7FFFFFFF).is_none());
     }
 
-    #[test]
-    fn test_read_proc_status_fields_pid1() {
-        let result = read_proc_status_fields(1);
-        assert!(result.is_some(), "PID 1 should have status");
-        let (user, ppid, tgid) = result.unwrap();
-        assert!(!user.is_empty());
-        assert_eq!(ppid, 0, "PID 1's ppid should be 0");
-        assert_eq!(tgid, 1, "PID 1's tgid should be 1");
-    }
+
 
     #[test]
     fn test_read_proc_start_time_ns_pid1() {
