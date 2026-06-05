@@ -74,8 +74,8 @@ pub fn snapshot(tree: &impl TreeStore, cache: &impl CacheStore) {
                 if let Some(uid_str) = val.split_whitespace().next()
                     && let Ok(uid) = uid_str.parse::<u32>()
                 {
-                    user = crate::proc::uid_to_username(uid)
-                        .unwrap_or_else(|| "unknown".to_string());
+                    user =
+                        crate::proc::uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
                 } else {
                     user = "unknown".to_string();
                 }
@@ -114,8 +114,8 @@ pub fn resolve(cache: &impl CacheStore, pid: u32) -> Option<ProcInfo> {
     }
     // Fallback: read /proc directly
     let cmd = crate::proc::read_proc_comm(pid)?;
-    let (user, ppid, tgid) = crate::proc::read_proc_status_fields(pid)
-        .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
+    let (user, ppid, tgid) =
+        crate::proc::read_proc_status_fields(pid).unwrap_or_else(|| ("unknown".to_string(), 0, 0));
     let start_time_ns = crate::proc::read_proc_start_time_ns(pid);
     let info = ProcInfo {
         cmd,
@@ -153,8 +153,7 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &crat
             );
         }
         crate::ProcEvent::Exec { pid, timestamp_ns } => {
-            let cmd = crate::proc::read_proc_comm(*pid)
-                .unwrap_or_else(|| "unknown".to_string());
+            let cmd = crate::proc::read_proc_comm(*pid).unwrap_or_else(|| "unknown".to_string());
             let (user, ppid, tgid) = crate::proc::read_proc_status_fields(*pid)
                 .unwrap_or_else(|| ("unknown".to_string(), 0, 0));
             tree.insert_node(
@@ -201,7 +200,11 @@ pub fn is_descendant(tree: &impl TreeStore, pid: u32, target_cmd: &str) -> bool 
 }
 
 /// Build a chain of ProcessLink from the process tree.
-pub fn build_chain_links(tree: &impl TreeStore, cache: &impl CacheStore, pid: u32) -> Vec<crate::ProcessLink> {
+pub fn build_chain_links(
+    tree: &impl TreeStore,
+    cache: &impl CacheStore,
+    pid: u32,
+) -> Vec<crate::ProcessLink> {
     let mut parts = Vec::new();
     let mut current = pid;
     let mut visited = std::collections::HashSet::new();
@@ -260,11 +263,7 @@ pub fn build_chain_string(tree: &impl TreeStore, cache: &impl CacheStore, pid: u
 pub fn children(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
     tree.all_pids()
         .into_iter()
-        .filter(|&p| {
-            tree.get_node(p)
-                .map(|n| n.ppid == pid)
-                .unwrap_or(false)
-        })
+        .filter(|&p| tree.get_node(p).map(|n| n.ppid == pid).unwrap_or(false))
         .collect()
 }
 
