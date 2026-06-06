@@ -13,20 +13,6 @@ cargo add proc-tree
 
 Minimum supported Rust version: **1.85** (edition 2024).
 
-## Requirements
-
-- Linux (reads `/proc/{pid}/status`, `/proc/{pid}/comm`, `/proc/{pid}/stat`)
-
-The crate compiles on any platform, but all runtime operations (`snapshot`, `resolve`, `read_proc_comm`, `read_proc_start_time_ns`, etc.) require a Linux `/proc` filesystem. Non-Linux platforms will return `None` / empty results.
-
-## Testing
-
-```bash
-cargo test
-```
-
-90 tests (20 unit + 52 integration + 18 doctests) covering:
-
 | Module | Coverage |
 |--------|----------|
 | `default_store` | Insert/get, TTL expiration, clone shares data, len/contains |
@@ -214,20 +200,6 @@ pub trait CacheStore {
 ```
 
 All functions in `ops` are generic over these traits — bring your own storage.
-
----
-
-## Modules
-
-```
-src/
-├── types.rs          # PidNode, ProcInfo
-├── traits.rs         # TreeStore, CacheStore trait definitions
-├── ops.rs            # All algorithms: snapshot, resolve, handle_event, display, children, descendants, siblings, find_by_cmd, find_by_user, is_descendant, build_chain_string, build_chain_links, tree_len
-├── proc.rs           # Raw /proc reading: parse_proc_entry, read_proc_comm, uid_to_username, read_proc_start_time_ns
-├── tree.rs           # ProcEvent, ProcessLink
-└── default_store.rs  # DefaultStore<V>, DefaultTree, DefaultCache (HashMap<Mutex> + Arc + TTL)
-```
 
 ---
 
