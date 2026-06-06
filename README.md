@@ -2,6 +2,8 @@
 
 [![Crates.io](https://img.shields.io/crates/v/proc-tree.svg)](https://crates.io/crates/proc-tree)
 [![Docs.rs](https://docs.rs/proc-tree/badge.svg)](https://docs.rs/proc-tree)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/lenitain/proc-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/lenitain/proc-tree/actions/workflows/ci.yml)
 
 Linux process tree — snapshot from `/proc`, incremental maintenance via fork/exec/exit events, ancestry chain queries, PID reuse detection, and pstree-style display.
 
