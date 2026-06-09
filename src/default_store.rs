@@ -150,12 +150,11 @@ impl ProcessStore for DefaultStore {
         let mut index = self.children_index.lock().unwrap();
 
         // Remove from old parent's index if ppid changed
-        if let Some(old_ppid) = old_ppid {
-            if old_ppid != new_ppid {
-                if let Some(children) = index.get_mut(&old_ppid) {
-                    children.retain(|&c| c != pid);
-                }
-            }
+        if let Some(old_ppid) = old_ppid
+            && old_ppid != new_ppid
+            && let Some(children) = index.get_mut(&old_ppid)
+        {
+            children.retain(|&c| c != pid);
         }
 
         // Add to new parent's index (avoid duplicates)
