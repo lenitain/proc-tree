@@ -103,9 +103,12 @@ impl DefaultStore {
         self.len() == 0
     }
 
-    /// Check if a PID exists and is not expired.
+    /// Check if a PID exists in the store.
+    ///
+    /// Does not trigger TTL eviction — use [`get_process`](ProcessStore::get_process)
+    /// to check existence with TTL enforcement.
     pub fn contains_key(&self, pid: u32) -> bool {
-        get_inner(&self.inner, pid, self.ttl, &self.children_index).is_some()
+        self.inner.lock().unwrap().contains_key(&pid)
     }
 }
 
@@ -355,7 +358,7 @@ mod tests {
     }
 
     #[test]
-    fn ttl_contains_key_expires() {
+    fn ttl_contains_key_does_not_expire() {
         let store = DefaultStore::new(1);
         store.insert_process(
             1,
@@ -369,7 +372,10 @@ mod tests {
         );
         assert!(store.contains_key(1));
         std::thread::sleep(Duration::from_millis(1100));
-        assert!(!store.contains_key(1));
+        // contains_key does not trigger TTL eviction
+        assert!(store.contains_key(1));
+        // but get_process does
+        assert!(store.get_process(1).is_none());
     }
 
     #[test]
