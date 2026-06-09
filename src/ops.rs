@@ -67,26 +67,39 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 
 /// Handle a batch of process lifecycle events.
 ///
+/// Returns a list of PIDs from Exit events. These processes have been
+/// marked for removal (children orphaned to init) but not yet removed.
+/// The caller should call `store.remove_process(pid)` after processing
+/// the events to complete the removal.
+///
 /// ```
 /// use proc_tree::{DefaultStore, handle_events, ProcEvent, ProcessStore};
 ///
 /// let store = DefaultStore::new(0);
 ///
-/// handle_events(&store, &[
+/// let exited = handle_events(&store, &[
 ///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 /// ]);
 ///
 /// let info = store.get_process(200).unwrap();
 /// assert_eq!(info.ppid, 100);
+/// assert!(exited.is_empty());
 /// ```
-pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) {
+pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32> {
+    let mut exited = Vec::new();
     for event in events {
-        handle_event(store, event);
+        if let Some(pid) = handle_event(store, event) {
+            exited.push(pid);
+        }
     }
+    exited
 }
 
 /// Handle a single process lifecycle event.
-pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) {
+///
+/// Returns `Some(pid)` for Exit events (process marked for removal but not removed),
+/// `None` for other events.
+pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32> {
     match event {
         ProcEvent::Fork {
             child_pid,
@@ -127,10 +140,11 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) {
                     store.insert_process(child_pid, info);
                 }
             }
-            // Remove the process from store
-            store.remove_process(*pid);
+            // Return pid for caller to remove after processing
+            return Some(*pid);
         }
     }
+    None
 }
 
 /// Check if `pid` is a descendant of any process whose cmd == `target_cmd`.

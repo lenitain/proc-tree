@@ -48,9 +48,15 @@ fn store_removes_on_exit() {
     snapshot(&store);
     // Get info before exit
     let info_before = resolve(&store, 1).unwrap();
-    // Exit event should remove from store
-    handle_event(&store, &ProcEvent::Exit { pid: 1 });
-    // After exit, resolve should fall back to /proc
+    // Exit event marks for removal but doesn't remove
+    let exited = handle_event(&store, &ProcEvent::Exit { pid: 1 });
+    assert_eq!(exited, Some(1));
+    // Process still in store
+    let info_after = resolve(&store, 1).unwrap();
+    assert_eq!(info_before.cmd, info_after.cmd);
+    // Caller removes the process
+    store.remove_process(1);
+    // After removal, resolve should fall back to /proc
     let info_after = resolve(&store, 1);
     // If PID 1 still exists in /proc, it should be resolvable
     if let Some(info_after) = info_after {

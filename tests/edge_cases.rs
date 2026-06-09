@@ -80,8 +80,13 @@ fn handle_fork_then_exec_then_exit() {
             timestamp_ns: 200,
         },
     );
-    handle_event(&store, &ProcEvent::Exit { pid });
-    // Process should be removed from store after exit
+    let exited = handle_event(&store, &ProcEvent::Exit { pid });
+    // Process should be marked for removal (returned as exited pid)
+    assert_eq!(exited, Some(pid));
+    // Process still in store until caller removes it
+    assert_eq!(tree_len(&store), 1);
+    // Caller removes the process
+    store.remove_process(pid);
     assert_eq!(tree_len(&store), 0);
 }
 

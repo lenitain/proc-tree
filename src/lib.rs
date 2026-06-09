@@ -33,10 +33,14 @@
 //! let s = build_chain_string(&store, 1234);
 //! println!("Chain: {}", s);
 //!
-//! // Handle events
-//! handle_events(&store, &[
+//! // Handle events (returns exited PIDs for caller to remove)
+//! let exited = handle_events(&store, &[
 //!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 //! ]);
+//! // Remove exited processes when ready
+//! for pid in exited {
+//!     store.remove_process(pid);
+//! }
 //! ```
 //!
 //! ## PID Reuse Detection
@@ -72,4 +76,4 @@ pub use ops::{
 };
 
 // Public API — proc utilities
-pub use proc::{parse_proc_entry, read_proc_comm, read_proc_start_time_ns};
+pub use proc::{parse_proc_entry, read_proc_comm, read_proc_start_time_ns, uid_to_username};
