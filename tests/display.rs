@@ -51,7 +51,7 @@ fn chain_string_each_link_has_pipes() {
 fn display_single_process() {
     let store = TestStore::default();
     // Manually add a single process via fork
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 999,

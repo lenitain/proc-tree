@@ -69,22 +69,46 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 ///
 /// Returns a list of PIDs from Exit events. These processes have been
 /// marked for removal (children orphaned to init) but not yet removed.
-/// The caller should call `store.remove_process(pid)` after processing
-/// the events to complete the removal.
+/// The caller **must** call `store.remove_process(pid)` after processing
+/// the events to complete the removal. Failing to do so will leak memory.
+///
+/// # Why deferred removal?
+///
+/// When a process exits, its children are orphaned to init (PID 1), but the
+/// process info is kept in the store. This allows callers to access process
+/// info (cmd, user, chain) after the exit event but before removal. This is
+/// important for event-driven systems where file events (fanotify) may arrive
+/// after the proc connector exit event.
+///
+/// # Example
 ///
 /// ```
 /// use proc_tree::{DefaultStore, handle_events, ProcEvent, ProcessStore};
 ///
 /// let store = DefaultStore::new(0);
 ///
+/// // Fork creates a process
 /// let exited = handle_events(&store, &[
 ///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 /// ]);
-///
-/// let info = store.get_process(200).unwrap();
-/// assert_eq!(info.ppid, 100);
 /// assert!(exited.is_empty());
+///
+/// // Exit marks for removal
+/// let exited = handle_events(&store, &[
+///     ProcEvent::Exit { pid: 200 },
+/// ]);
+/// assert_eq!(exited, vec![200]);
+///
+/// // Process still accessible until removed
+/// assert!(store.get_process(200).is_some());
+///
+/// // Caller must remove after processing
+/// for pid in exited {
+///     store.remove_process(pid);
+/// }
+/// assert!(store.get_process(200).is_none());
 /// ```
+#[must_use = "returned PIDs must be removed by calling store.remove_process(pid)"]
 pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32> {
     let mut exited = Vec::new();
     for event in events {
@@ -99,6 +123,12 @@ pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32
 ///
 /// Returns `Some(pid)` for Exit events (process marked for removal but not removed),
 /// `None` for other events.
+///
+/// # Important
+///
+/// For Exit events, the returned PID **must** be removed by calling
+/// `store.remove_process(pid)` after processing. See [`handle_events`] for details.
+#[must_use = "returned PID must be removed by calling store.remove_process(pid)"]
 pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32> {
     match event {
         ProcEvent::Fork {

@@ -199,7 +199,7 @@ fn find_by_user_nonexistent() {
 #[test]
 fn fork_creates_tree_node() {
     let store = TestStore::default();
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 500,
@@ -218,7 +218,7 @@ fn fork_creates_tree_node() {
 fn fork_multiple_children() {
     let store = TestStore::default();
     for i in 600..610 {
-        handle_event(
+        let _ = handle_event(
             &store,
             &ProcEvent::Fork {
                 child_pid: i,

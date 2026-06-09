@@ -43,7 +43,7 @@ fn resolve_large_pid() {
 #[test]
 fn handle_empty_events() {
     let store = TestStore::default();
-    handle_events(&store, &[]);
+    let _ = handle_events(&store, &[]);
     assert_eq!(tree_len(&store), 0);
 }
 
@@ -57,7 +57,7 @@ fn handle_many_forks() {
             timestamp_ns: 0,
         })
         .collect();
-    handle_events(&store, &events);
+    let _ = handle_events(&store, &events);
     assert_eq!(tree_len(&store), 1000);
 }
 
@@ -65,7 +65,7 @@ fn handle_many_forks() {
 fn handle_fork_then_exec_then_exit() {
     let store = TestStore::default();
     let pid = 5000;
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: pid,
@@ -73,7 +73,7 @@ fn handle_fork_then_exec_then_exit() {
             timestamp_ns: 100,
         },
     );
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Exec {
             pid,
@@ -90,13 +90,150 @@ fn handle_fork_then_exec_then_exit() {
     assert_eq!(tree_len(&store), 0);
 }
 
+// ---- Deferred removal tests ----
+
+#[test]
+fn exit_deferred_removal() {
+    let store = TestStore::default();
+    // Create a process
+    let _ = handle_event(
+        &store,
+        &ProcEvent::Fork {
+            child_pid: 100,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
+    assert_eq!(tree_len(&store), 1);
+    assert!(store.get_process(100).is_some());
+
+    // Exit marks for removal but doesn't remove
+    let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
+    assert_eq!(exited, Some(100));
+    // Process still in store
+    assert_eq!(tree_len(&store), 1);
+    assert!(store.get_process(100).is_some());
+
+    // Caller removes after processing
+    store.remove_process(100);
+    assert_eq!(tree_len(&store), 0);
+    assert!(store.get_process(100).is_none());
+}
+
+#[test]
+fn exit_orphans_children_before_removal() {
+    let store = TestStore::default();
+    // Create parent and child
+    let _ = handle_event(
+        &store,
+        &ProcEvent::Fork {
+            child_pid: 100,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
+    let _ = handle_event(
+        &store,
+        &ProcEvent::Fork {
+            child_pid: 200,
+            parent_pid: 100,
+            timestamp_ns: 0,
+        },
+    );
+    assert_eq!(store.get_process(200).unwrap().ppid, 100);
+
+    // Exit parent - child should be orphaned to init
+    let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
+    assert_eq!(exited, Some(100));
+
+    // Child's ppid should be 1 (init) before parent removal
+    assert_eq!(store.get_process(200).unwrap().ppid, 1);
+
+    // Parent still accessible
+    assert!(store.get_process(100).is_some());
+
+    // Remove parent
+    store.remove_process(100);
+    assert!(store.get_process(100).is_none());
+    // Child still accessible
+    assert!(store.get_process(200).is_some());
+}
+
+#[test]
+fn handle_events_returns_multiple_exited_pids() {
+    let store = TestStore::default();
+    // Create two processes
+    let _ = handle_events(
+        &store,
+        &[
+            ProcEvent::Fork {
+                child_pid: 100,
+                parent_pid: 1,
+                timestamp_ns: 0,
+            },
+            ProcEvent::Fork {
+                child_pid: 200,
+                parent_pid: 1,
+                timestamp_ns: 0,
+            },
+        ],
+    );
+    assert_eq!(tree_len(&store), 2);
+
+    // Exit both processes
+    let exited = handle_events(
+        &store,
+        &[
+            ProcEvent::Exit { pid: 100 },
+            ProcEvent::Exit { pid: 200 },
+        ],
+    );
+    assert_eq!(exited.len(), 2);
+    assert!(exited.contains(&100));
+    assert!(exited.contains(&200));
+
+    // Both still in store
+    assert_eq!(tree_len(&store), 2);
+
+    // Remove both
+    for pid in exited {
+        store.remove_process(pid);
+    }
+    assert_eq!(tree_len(&store), 0);
+}
+
+#[test]
+fn non_exit_events_return_none() {
+    let store = TestStore::default();
+    // Fork returns None
+    let result = handle_event(
+        &store,
+        &ProcEvent::Fork {
+            child_pid: 100,
+            parent_pid: 1,
+            timestamp_ns: 0,
+        },
+    );
+    assert!(result.is_none());
+
+    // Exec returns None
+    let result = handle_event(
+        &store,
+        &ProcEvent::Exec {
+            pid: 100,
+            timestamp_ns: 100,
+        },
+    );
+    assert!(result.is_none());
+}
+
 // ---- Chain with cycles ----
 
 #[test]
 fn build_chain_with_cycle() {
     let store = TestStore::default();
     // Create a cycle: 1 → 2 → 3 → 1
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 2,
@@ -104,7 +241,7 @@ fn build_chain_with_cycle() {
             timestamp_ns: 0,
         },
     );
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 3,
@@ -123,7 +260,7 @@ fn build_chain_with_cycle() {
 #[test]
 fn is_descendant_with_cycle() {
     let store = TestStore::default();
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 2,

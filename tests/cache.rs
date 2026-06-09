@@ -20,7 +20,7 @@ fn cache_hit_on_resolve() {
 fn store_updated_on_exec_event() {
     let store = TestStore::default();
     // Fork creates process
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 200,
@@ -30,7 +30,7 @@ fn store_updated_on_exec_event() {
     );
     // Exec updates store with cmd info
     // Note: this reads from /proc, so 200 must exist or it'll use "unknown"
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Exec {
             pid: 200,
@@ -68,7 +68,7 @@ fn store_removes_on_exit() {
 fn tree_len_tracks_entries() {
     let store = TestStore::default();
     assert_eq!(tree_len(&store), 0);
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 100,
@@ -77,7 +77,7 @@ fn tree_len_tracks_entries() {
         },
     );
     assert_eq!(tree_len(&store), 1);
-    handle_event(
+    let _ = handle_event(
         &store,
         &ProcEvent::Fork {
             child_pid: 200,
