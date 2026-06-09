@@ -38,11 +38,16 @@ impl Clone for Entry {
 
 type Inner = Arc<Mutex<HashMap<u32, Entry>>>;
 
-fn get_inner(inner: &Inner, pid: u32, ttl: Duration) -> Option<ProcessInfo> {
+fn get_inner(inner: &Inner, pid: u32, ttl: Duration, children_index: &Arc<Mutex<HashMap<u32, Vec<u32>>>>) -> Option<ProcessInfo> {
     let mut map = inner.lock().unwrap();
     let entry = map.get(&pid)?;
     if !ttl.is_zero() && entry.inserted_at.elapsed() >= ttl {
-        map.remove(&pid);
+        let info = map.remove(&pid).unwrap().value;
+        // Update children index
+        let mut index = children_index.lock().unwrap();
+        if let Some(children) = index.get_mut(&info.ppid) {
+            children.retain(|&c| c != pid);
+        }
         return None;
     }
     Some(entry.value.clone())
@@ -93,7 +98,7 @@ impl DefaultStore {
 
     /// Check if a PID exists and is not expired.
     pub fn contains_key(&self, pid: u32) -> bool {
-        get_inner(&self.inner, pid, self.ttl).is_some()
+        get_inner(&self.inner, pid, self.ttl, &self.children_index).is_some()
     }
 }
 
@@ -116,7 +121,7 @@ impl Default for DefaultStore {
 
 impl ProcessStore for DefaultStore {
     fn get_process(&self, pid: u32) -> Option<ProcessInfo> {
-        get_inner(&self.inner, pid, self.ttl)
+        get_inner(&self.inner, pid, self.ttl, &self.children_index)
     }
 
     fn insert_process(&self, pid: u32, info: ProcessInfo) {

@@ -54,15 +54,22 @@ pub fn snapshot(store: &impl ProcessStore) {
 /// assert!(!info.cmd.is_empty());
 /// ```
 pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
-    // Try store first
-    if let Some(info) = store.get_process(pid) {
-        return Some(info);
+    let info = resolve_process_info(store, pid);
+    // Populate store for future lookups if we got info from /proc
+    if let Some(ref info) = info
+        && store.get_process(pid).is_none()
+    {
+        store.insert_process(pid, info.clone());
     }
-    // Fallback: read /proc directly via parse_proc_entry
-    let info = crate::proc::parse_proc_entry(pid)?;
-    // Populate store for future lookups
-    store.insert_process(pid, info.clone());
-    Some(info)
+    info
+}
+
+/// Internal helper to resolve process info with fallback chain.
+///
+/// Tries store first, then falls back to reading `/proc` directly.
+/// Returns `None` if the process doesn't exist.
+fn resolve_process_info(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
+    store.get_process(pid).or_else(|| crate::proc::parse_proc_entry(pid))
 }
 
 /// Handle a batch of process lifecycle events.
@@ -100,7 +107,7 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// }
 /// assert!(store.get_process(200).is_none());
 /// ```
-pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -> Vec<u32> {
+pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32> {
     let mut exited = Vec::new();
     for event in events {
         if let Some(pid) = handle_event(store, event) {
@@ -138,7 +145,7 @@ pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -
 /// store.remove_process(pid);
 /// assert!(store.get_process(100).is_none());
 /// ```
-pub fn handle_event<S: ProcessStore + Clone>(store: &S, event: &ProcEvent) -> Option<u32> {
+pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32> {
     match event {
         ProcEvent::Fork {
             child_pid,
@@ -201,13 +208,24 @@ pub fn handle_event<S: ProcessStore + Clone>(store: &S, event: &ProcEvent) -> Op
 /// assert!(!is_descendant(&store, 1, "sshd")); // init is not a descendant of sshd
 /// ```
 pub fn is_descendant(store: &impl ProcessStore, pid: u32, target_cmd: &str) -> bool {
+    walk_ancestors(store, pid, |info| info.cmd == target_cmd)
+}
+
+/// Walk up the process tree from `pid`, calling `predicate` on each ancestor.
+///
+/// Returns `true` if the predicate matches any ancestor, `false` otherwise.
+/// Handles cycles by tracking visited PIDs.
+fn walk_ancestors<P>(store: &impl ProcessStore, pid: u32, predicate: P) -> bool
+where
+    P: Fn(&ProcessInfo) -> bool,
+{
     let mut current = pid;
     let mut visited = std::collections::HashSet::new();
     while let Some(info) = store.get_process(current) {
         if !visited.insert(current) {
             break;
         }
-        if info.cmd == target_cmd {
+        if predicate(&info) {
             return true;
         }
         if info.ppid == 0 || current == info.ppid {
@@ -227,27 +245,27 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
         if !visited.insert(current) {
             break;
         }
-        let (ppid, cmd, user) = if let Some(info) = store.get_process(current) {
-            (info.ppid, info.cmd, info.user)
-        } else if let Some(info) = crate::proc::parse_proc_entry(current) {
-            (info.ppid, info.cmd, info.user)
-        } else {
-            parts.push(ProcessLink {
-                pid: current,
-                cmd: "unknown".to_string(),
-                user: "unknown".to_string(),
-            });
-            break;
-        };
-        parts.push(ProcessLink {
-            pid: current,
-            cmd,
-            user,
-        });
-        if ppid == 0 || current == ppid {
-            break;
+        match resolve_process_info(store, current) {
+            Some(info) => {
+                parts.push(ProcessLink {
+                    pid: current,
+                    cmd: info.cmd,
+                    user: info.user,
+                });
+                if info.ppid == 0 || current == info.ppid {
+                    break;
+                }
+                current = info.ppid;
+            }
+            None => {
+                parts.push(ProcessLink {
+                    pid: current,
+                    cmd: "unknown".to_string(),
+                    user: "unknown".to_string(),
+                });
+                break;
+            }
         }
-        current = ppid;
     }
     parts
 }
@@ -373,18 +391,13 @@ pub fn siblings(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// assert_eq!(find_by_cmd(&store, "nginx"), Vec::<u32>::new());
 /// ```
 pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
-    store
-        .all_pids()
-        .into_iter()
-        .filter(|&pid| {
-            let cmd = store
-                .get_process(pid)
-                .map(|info| info.cmd)
-                .filter(|c| !c.is_empty())
-                .or_else(|| crate::proc::read_proc_comm(pid));
-            cmd.as_deref() == Some(target_cmd)
-        })
-        .collect()
+    find_by(store, |pid| {
+        store
+            .get_process(pid)
+            .map(|info| info.cmd)
+            .filter(|c| !c.is_empty())
+            .or_else(|| crate::proc::read_proc_comm(pid))
+    }, target_cmd)
 }
 
 /// Find all PIDs whose user matches the given string.
@@ -402,16 +415,25 @@ pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
 /// assert_eq!(find_by_user(&store, "nobody"), Vec::<u32>::new());
 /// ```
 pub fn find_by_user(store: &impl ProcessStore, target_user: &str) -> Vec<u32> {
+    find_by(store, |pid| {
+        store
+            .get_process(pid)
+            .map(|info| info.user)
+            .or_else(|| crate::proc::parse_proc_entry(pid).map(|info| info.user))
+    }, target_user)
+}
+
+/// Generic find function that filters PIDs by a value extractor.
+///
+/// This is a helper to reduce code duplication between `find_by_cmd` and `find_by_user`.
+fn find_by<F>(store: &impl ProcessStore, extract: F, target: &str) -> Vec<u32>
+where
+    F: Fn(u32) -> Option<String>,
+{
     store
         .all_pids()
         .into_iter()
-        .filter(|&pid| {
-            let user = store
-                .get_process(pid)
-                .map(|info| info.user)
-                .or_else(|| crate::proc::parse_proc_entry(pid).map(|info| info.user));
-            user.as_deref() == Some(target_user)
-        })
+        .filter(|&pid| extract(pid).as_deref() == Some(target))
         .collect()
 }
 
@@ -431,20 +453,28 @@ pub fn find_by_user(store: &impl ProcessStore, target_user: &str) -> Vec<u32> {
 /// assert!(output.contains("cron"));
 /// ```
 pub fn display(store: &impl ProcessStore, root_pid: u32) -> String {
-    let cmd = get_cmd(store, root_pid);
-    let kids = children(store, root_pid);
+    render_tree(store, root_pid, true)
+}
+
+/// Recursive tree renderer.
+///
+/// `is_root` controls the rendering style:
+/// - Root node: first child attaches with "─"
+/// - Non-root nodes: all children use tree prefixes
+fn render_tree(store: &impl ProcessStore, pid: u32, is_root: bool) -> String {
+    let cmd = get_cmd(store, pid);
+    let kids = children(store, pid);
     if kids.is_empty() {
         return cmd;
     }
-    // Root node: first child attaches with "─", rest with tree prefixes
     let mut output = cmd;
     for (i, &kid) in kids.iter().enumerate() {
         let is_last = i == kids.len() - 1;
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
-        let sub = display_subtree(store, kid);
+        let sub = render_tree(store, kid, false);
         let lines: Vec<&str> = sub.lines().collect();
-        if i == 0 {
+        if is_root && i == 0 {
             output.push_str(&format!("─{}", lines[0]));
         } else {
             output.push('\n');
@@ -460,39 +490,11 @@ pub fn display(store: &impl ProcessStore, root_pid: u32) -> String {
     output
 }
 
-/// Recursive helper for non-root subtrees.
-fn display_subtree(store: &impl ProcessStore, pid: u32) -> String {
-    let cmd = get_cmd(store, pid);
-    let kids = children(store, pid);
-    if kids.is_empty() {
-        return cmd;
-    }
-    let mut output = cmd;
-    for (i, &kid) in kids.iter().enumerate() {
-        let is_last = i == kids.len() - 1;
-        let prefix = if is_last { "└─" } else { "├─" };
-        let continuation = if is_last { "  " } else { "│ " };
-        let sub = display_subtree(store, kid);
-        let lines: Vec<&str> = sub.lines().collect();
-        output.push('\n');
-        output.push_str(prefix);
-        output.push_str(lines[0]);
-        for line in &lines[1..] {
-            output.push('\n');
-            output.push_str(continuation);
-            output.push_str(line);
-        }
-    }
-    output
-}
-
 /// Get command name for a PID, with fallback chain: store -> /proc -> "unknown"
 fn get_cmd(store: &impl ProcessStore, pid: u32) -> String {
-    store
-        .get_process(pid)
+    resolve_process_info(store, pid)
         .map(|info| info.cmd)
         .filter(|c| !c.is_empty())
-        .or_else(|| crate::proc::read_proc_comm(pid))
         .unwrap_or_else(|| "unknown".to_string())
 }
 
@@ -508,8 +510,8 @@ fn get_cmd(store: &impl ProcessStore, pid: u32) -> String {
 /// store.insert_process(2, ProcessInfo { ppid: 1, cmd: "bash".into(), user: "root".into(), tgid: 2, start_time_ns: 0 });
 /// assert_eq!(tree_len(&store), 2);
 /// ```
-pub fn tree_len(store: &impl ProcessStore) -> u64 {
-    store.all_pids().len() as u64
+pub fn tree_len(store: &impl ProcessStore) -> usize {
+    store.all_pids().len()
 }
 
 #[cfg(test)]

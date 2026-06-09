@@ -10,7 +10,6 @@
 //! use proc_tree::{snapshot, resolve, handle_events, build_chain_string};
 //!
 //! // Implement your own storage (or use a provided example)
-//! # #[derive(Clone)]
 //! # struct MyStore;
 //! # impl ProcessStore for MyStore {
 //! #     fn get_process(&self, pid: u32) -> Option<ProcessInfo> { None }
