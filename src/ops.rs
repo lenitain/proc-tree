@@ -168,7 +168,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
                 },
             );
         }
-        ProcEvent::Exec { pid, timestamp_ns } => {
+        ProcEvent::Exec { pid, .. } => {
             let mut info = crate::proc::parse_proc_entry(*pid).unwrap_or_else(|| {
                 let cmd = "unknown".to_string();
                 ProcessInfo {
@@ -179,7 +179,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
                     start_time_ns: 0,
                 }
             });
-            info.start_time_ns = *timestamp_ns;
+            // Keep start_time_ns from /proc, don't overwrite with event timestamp
             store.insert_process(*pid, info);
         }
         ProcEvent::Exit { pid } => {
