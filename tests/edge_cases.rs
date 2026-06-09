@@ -81,13 +81,9 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
-    // Process should be marked as exited (returned as guard)
-    assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid(), pid);
+    // Exit returns PID
+    assert_eq!(exited, Some(pid));
     // Process still in store
-    assert_eq!(tree_len(&store), 1);
-    // Guard drop does NOT remove process
-    drop(exited);
     assert_eq!(tree_len(&store), 1);
     // Explicit removal by caller
     store.remove_process(pid);
@@ -97,7 +93,7 @@ fn handle_fork_then_exec_then_exit() {
 // ---- Deferred removal tests ----
 
 #[test]
-fn exit_deferred_removal() {
+fn exit_returns_pid() {
     let store = TestStore::default();
     // Create a process
     let _ = handle_event(
@@ -111,10 +107,9 @@ fn exit_deferred_removal() {
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
 
-    // Exit marks for removal but doesn't remove
+    // Exit returns PID, process stays in store
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid(), 100);
+    assert_eq!(exited, Some(100));
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
@@ -149,8 +144,7 @@ fn exit_orphans_children_before_removal() {
 
     // Exit parent - child should be orphaned to init
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid(), 100);
+    assert_eq!(exited, Some(100));
 
     // Child's ppid should be 1 (init) before parent removal
     assert_eq!(store.get_process(200).unwrap().ppid, 1);
@@ -192,19 +186,16 @@ fn handle_events_returns_multiple_exited_pids() {
         &[ProcEvent::Exit { pid: 100 }, ProcEvent::Exit { pid: 200 }],
     );
     assert_eq!(exited.len(), 2);
-    assert!(exited.iter().any(|g| g.pid() == 100));
-    assert!(exited.iter().any(|g| g.pid() == 200));
+    assert!(exited.contains(&100));
+    assert!(exited.contains(&200));
 
     // Both still in store
     assert_eq!(tree_len(&store), 2);
 
-    // Drop guards does NOT remove processes
-    drop(exited);
-    assert_eq!(tree_len(&store), 2);
-
     // Caller explicitly removes when done
-    store.remove_process(100);
-    store.remove_process(200);
+    for pid in exited {
+        store.remove_process(pid);
+    }
     assert_eq!(tree_len(&store), 0);
 }
 
