@@ -129,8 +129,9 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &Proc
             tree.insert_node(*pid, node);
             cache.insert_info(*pid, info);
         }
-        ProcEvent::Exit { .. } => {
-            // Keep the node — still valid for historical chain lookups
+        ProcEvent::Exit { pid } => {
+            // Remove from active tree, but keep in historical data
+            tree.remove_node(*pid);
         }
     }
 }
@@ -256,10 +257,7 @@ pub fn build_chain_string(tree: &impl TreeStore, cache: &impl CacheStore, pid: u
 /// assert!(children(&tree, 999).is_empty());
 /// ```
 pub fn children(tree: &impl TreeStore, pid: u32) -> Vec<u32> {
-    tree.all_pids()
-        .into_iter()
-        .filter(|&p| tree.get_node(p).map(|n| n.ppid == pid).unwrap_or(false))
-        .collect()
+    tree.children_of(pid)
 }
 
 /// Get all descendants of a PID (BFS traversal).
