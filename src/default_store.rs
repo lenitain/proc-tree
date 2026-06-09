@@ -53,6 +53,8 @@ fn get_inner(
         if let Some(children) = index.get_mut(&info.ppid) {
             children.retain(|&c| c != pid);
         }
+        // Clean up this process's own children index entry
+        index.remove(&pid);
         return None;
     }
     Some(entry.value.clone())
@@ -130,14 +132,34 @@ impl ProcessStore for DefaultStore {
     }
 
     fn insert_process(&self, pid: u32, info: ProcessInfo) {
-        let ppid = info.ppid;
+        let new_ppid = info.ppid;
+
+        // Check if process already exists with different ppid
+        let old_ppid = {
+            let map = self.inner.lock().unwrap();
+            map.get(&pid).map(|e| e.value.ppid)
+        };
 
         // Insert the process
         insert_inner(&self.inner, pid, info);
 
         // Update children index
         let mut index = self.children_index.lock().unwrap();
-        index.entry(ppid).or_default().push(pid);
+
+        // Remove from old parent's index if ppid changed
+        if let Some(old_ppid) = old_ppid {
+            if old_ppid != new_ppid {
+                if let Some(children) = index.get_mut(&old_ppid) {
+                    children.retain(|&c| c != pid);
+                }
+            }
+        }
+
+        // Add to new parent's index (avoid duplicates)
+        let children = index.entry(new_ppid).or_default();
+        if !children.contains(&pid) {
+            children.push(pid);
+        }
     }
 
     fn remove_process(&self, pid: u32) -> Option<ProcessInfo> {
@@ -150,9 +172,12 @@ impl ProcessStore for DefaultStore {
         // Remove from children index
         if let Some(ref p) = info {
             let mut index = self.children_index.lock().unwrap();
+            // Remove from parent's index
             if let Some(children) = index.get_mut(&p.ppid) {
                 children.retain(|&c| c != pid);
             }
+            // Clean up this process's own children index entry
+            index.remove(&pid);
         }
 
         info
@@ -432,5 +457,190 @@ mod tests {
         assert_eq!(kids_100, vec![300]);
 
         assert!(store.children_of(999).is_empty());
+    }
+
+    #[test]
+    fn insert_ppid_change_removes_from_old_parent() {
+        let store = DefaultStore::new(0);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "other".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            200,
+            ProcessInfo {
+                ppid: 100,
+                cmd: "child".into(),
+                user: "root".into(),
+                tgid: 200,
+                start_time_ns: 0,
+            },
+        );
+
+        // child 200 is under parent 100
+        assert_eq!(store.children_of(100), vec![200]);
+        assert!(store.children_of(1).is_empty());
+
+        // Re-parent 200 from 100 to 1
+        store.insert_process(
+            200,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "child".into(),
+                user: "root".into(),
+                tgid: 200,
+                start_time_ns: 0,
+            },
+        );
+
+        // 200 should be removed from old parent's index
+        assert!(store.children_of(100).is_empty(), "old parent should have no children");
+        // 200 should be in new parent's index
+        assert_eq!(store.children_of(1), vec![200]);
+    }
+
+    #[test]
+    fn insert_same_ppid_no_duplicate() {
+        let store = DefaultStore::new(0);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "a".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        // Insert same pid with same ppid again
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "a".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        // Should not duplicate
+        assert_eq!(store.children_of(1), vec![100]);
+    }
+
+    #[test]
+    fn remove_process_cleans_own_children_index() {
+        let store = DefaultStore::new(0);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "parent".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            200,
+            ProcessInfo {
+                ppid: 100,
+                cmd: "child".into(),
+                user: "root".into(),
+                tgid: 200,
+                start_time_ns: 0,
+            },
+        );
+
+        assert_eq!(store.children_of(100), vec![200]);
+
+        // Remove parent 100
+        store.remove_process(100);
+
+        // children_of(100) should return empty, not stale [200]
+        assert!(store.children_of(100).is_empty(), "removed process should have no children index");
+        // Child 200 still exists in store but parent is gone
+        assert!(store.get_process(200).is_some());
+    }
+
+    #[test]
+    fn ttl_expiration_cleans_own_children_index() {
+        let store = DefaultStore::new(1); // 1 second TTL
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "parent".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            200,
+            ProcessInfo {
+                ppid: 100,
+                cmd: "child".into(),
+                user: "root".into(),
+                tgid: 200,
+                start_time_ns: 0,
+            },
+        );
+
+        assert_eq!(store.children_of(100), vec![200]);
+
+        // Wait for parent to expire
+        std::thread::sleep(Duration::from_millis(1100));
+
+        // Accessing expired parent triggers eviction
+        assert!(store.get_process(100).is_none());
+
+        // children_of(100) should return empty, not stale [200]
+        assert!(store.children_of(100).is_empty(), "expired process should have no children index");
     }
 }
