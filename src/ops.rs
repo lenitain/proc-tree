@@ -108,7 +108,10 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// assert!(store.get_process(200).is_none());
 /// ```
 #[must_use = "returned guards must be stored or they will remove processes immediately"]
-pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -> Vec<ExitedProcessGuard<S>> {
+pub fn handle_events<S: ProcessStore + Clone>(
+    store: &S,
+    events: &[ProcEvent],
+) -> Vec<ExitedProcessGuard<S>> {
     let mut guards = Vec::new();
     for event in events {
         if let Some(guard) = handle_event(store, event) {
@@ -148,7 +151,10 @@ pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -
 /// assert!(store.get_process(100).is_none());
 /// ```
 #[must_use = "returned guard must be stored or it will remove the process immediately"]
-pub fn handle_event<S: ProcessStore + Clone>(store: &S, event: &ProcEvent) -> Option<ExitedProcessGuard<S>> {
+pub fn handle_event<S: ProcessStore + Clone>(
+    store: &S,
+    event: &ProcEvent,
+) -> Option<ExitedProcessGuard<S>> {
     match event {
         ProcEvent::Fork {
             child_pid,

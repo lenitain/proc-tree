@@ -82,7 +82,8 @@ fn handle_fork_then_exec_then_exit() {
     );
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
     // Process should be marked for removal (returned as guard)
-    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), pid);
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid(), pid);
     // Process still in store until guard is dropped
     assert_eq!(tree_len(&store), 1);
     // Explicit removal
@@ -109,7 +110,8 @@ fn exit_deferred_removal() {
 
     // Exit marks for removal but doesn't remove
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), 100);
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid(), 100);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
@@ -144,7 +146,8 @@ fn exit_orphans_children_before_removal() {
 
     // Exit parent - child should be orphaned to init
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), 100);
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid(), 100);
 
     // Child's ppid should be 1 (init) before parent removal
     assert_eq!(store.get_process(200).unwrap().ppid, 1);
@@ -183,10 +186,7 @@ fn handle_events_returns_multiple_exited_pids() {
     // Exit both processes
     let exited = handle_events(
         &store,
-        &[
-            ProcEvent::Exit { pid: 100 },
-            ProcEvent::Exit { pid: 200 },
-        ],
+        &[ProcEvent::Exit { pid: 100 }, ProcEvent::Exit { pid: 200 }],
     );
     assert_eq!(exited.len(), 2);
     assert!(exited.iter().any(|g| g.pid() == 100));
