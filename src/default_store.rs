@@ -7,7 +7,7 @@
 //! ```rust
 //! use proc_tree::{DefaultStore, snapshot};
 //!
-//! let store = DefaultStore::new(65536, 600);
+//! let store = DefaultStore::new(600);
 //! snapshot(&store);
 //! ```
 
@@ -71,9 +71,9 @@ pub struct DefaultStore {
 }
 
 impl DefaultStore {
-    /// Create a new store with the given capacity hint and TTL in seconds.
+    /// Create a new store with the given TTL in seconds.
     /// `ttl_secs = 0` means no expiration.
-    pub fn new(_capacity: u64, ttl_secs: u64) -> Self {
+    pub fn new(ttl_secs: u64) -> Self {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
             children_index: Arc::new(Mutex::new(HashMap::new())),
@@ -108,9 +108,9 @@ impl Clone for DefaultStore {
 }
 
 impl Default for DefaultStore {
-    /// Creates a store with capacity 100 and no TTL.
+    /// Creates a store with no TTL.
     fn default() -> Self {
-        Self::new(100, 0)
+        Self::new(0)
     }
 }
 
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn default_store_insert_get() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn default_store_ttl_expired() {
-        let store = DefaultStore::new(100, 0); // ttl=0 means no expiry
+        let store = DefaultStore::new(0); // ttl=0 means no expiry
         store.insert_process(
             1,
             ProcessInfo {
@@ -201,7 +201,7 @@ mod tests {
         assert!(store.get_process(1).is_some());
 
         // With ttl=1, entry expires after 1 second
-        let store = DefaultStore::new(100, 1);
+        let store = DefaultStore::new(1);
         store.insert_process(
             1,
             ProcessInfo {
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn clone_shares_data() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn len_and_contains() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         assert_eq!(store.len(), 0);
         store.insert_process(
             1,
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn is_empty_default() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         assert!(store.is_empty());
         store.insert_process(
             1,
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn all_pids_returns_keys() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn ttl_contains_key_expires() {
-        let store = DefaultStore::new(100, 1);
+        let store = DefaultStore::new(1);
         store.insert_process(
             1,
             ProcessInfo {
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn remove_process() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn children_of() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {

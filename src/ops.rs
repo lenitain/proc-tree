@@ -13,7 +13,7 @@ use crate::types::ProcessInfo;
 /// ```no_run
 /// use proc_tree::{DefaultStore, snapshot, ProcessStore};
 ///
-/// let store = DefaultStore::new(65536, 600);
+/// let store = DefaultStore::new(600);
 /// snapshot(&store);
 ///
 /// // PID 1 should always exist on Linux
@@ -47,7 +47,7 @@ pub fn snapshot(store: &impl ProcessStore) {
 /// ```no_run
 /// use proc_tree::{DefaultStore, snapshot, resolve, ProcessStore};
 ///
-/// let store = DefaultStore::new(65536, 600);
+/// let store = DefaultStore::new(600);
 /// snapshot(&store);
 ///
 /// let info = resolve(&store, 1).unwrap();
@@ -70,7 +70,7 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// ```
 /// use proc_tree::{DefaultStore, handle_events, ProcEvent, ProcessStore};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 ///
 /// handle_events(&store, &[
 ///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
@@ -138,7 +138,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) {
 /// ```
 /// use proc_tree::{DefaultStore, is_descendant, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "sshd".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 100, cmd: "bash".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -207,7 +207,7 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
 /// ```
 /// use proc_tree::{DefaultStore, build_chain_string, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 ///
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "sshd".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
@@ -229,7 +229,7 @@ pub fn build_chain_string(store: &impl ProcessStore, pid: u32) -> String {
 /// ```
 /// use proc_tree::{DefaultStore, children, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "a".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 1, cmd: "b".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -250,7 +250,7 @@ pub fn children(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// ```
 /// use proc_tree::{DefaultStore, descendants, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "a".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 100, cmd: "b".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -282,7 +282,7 @@ pub fn descendants(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// ```
 /// use proc_tree::{DefaultStore, siblings, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "a".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 1, cmd: "b".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -309,7 +309,7 @@ pub fn siblings(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// ```
 /// use proc_tree::{DefaultStore, find_by_cmd, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "sshd".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 1, cmd: "sshd".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -340,7 +340,7 @@ pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
 /// ```
 /// use proc_tree::{DefaultStore, find_by_user, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 ///
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "bash".into(), user: "alice".into(), tgid: 100, start_time_ns: 0 });
@@ -368,7 +368,7 @@ pub fn find_by_user(store: &impl ProcessStore, target_user: &str) -> Vec<u32> {
 /// ```
 /// use proc_tree::{DefaultStore, display, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
 /// store.insert_process(100, ProcessInfo { ppid: 1, cmd: "sshd".into(), user: "root".into(), tgid: 100, start_time_ns: 0 });
 /// store.insert_process(200, ProcessInfo { ppid: 1, cmd: "cron".into(), user: "root".into(), tgid: 200, start_time_ns: 0 });
@@ -449,7 +449,7 @@ fn get_cmd(store: &impl ProcessStore, pid: u32) -> String {
 /// ```
 /// use proc_tree::{DefaultStore, tree_len, ProcessStore, ProcessInfo};
 ///
-/// let store = DefaultStore::new(100, 0);
+/// let store = DefaultStore::new(0);
 /// assert_eq!(tree_len(&store), 0);
 ///
 /// store.insert_process(1, ProcessInfo { ppid: 0, cmd: "init".into(), user: "root".into(), tgid: 1, start_time_ns: 0 });
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn display_single_node() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
@@ -483,7 +483,7 @@ mod tests {
 
     #[test]
     fn display_root_with_children() {
-        let store = DefaultStore::new(100, 0);
+        let store = DefaultStore::new(0);
         store.insert_process(
             1,
             ProcessInfo {
