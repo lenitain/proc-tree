@@ -2,7 +2,7 @@
 //!
 //! All functions are generic over [`ProcessStore`] so they work with any storage backend.
 
-use crate::guard::ExitedProcessGuard;
+use crate::guard::ProcessExitGuard;
 use crate::traits::ProcessStore;
 use crate::tree::{ProcEvent, ProcessLink};
 use crate::types::ProcessInfo;
@@ -68,8 +68,8 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 
 /// Handle a batch of process lifecycle events.
 ///
-/// Returns RAII guards for exited processes. Each guard automatically removes
-/// the process from the store when dropped. Use `.remove()` for explicit removal.
+/// Returns [`ProcessExitGuard`]s for exited processes. Each guard keeps the
+/// process info in the store until the guard is dropped.
 ///
 /// # Why deferred removal?
 ///
@@ -92,26 +92,24 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// ]);
 /// assert!(guards.is_empty());
 ///
-/// // Exit returns guards
+/// // Exit returns guards (process info stays in store)
 /// let guards = handle_events(&store, &[
 ///     ProcEvent::Exit { pid: 200 },
 /// ]);
 /// assert_eq!(guards.len(), 1);
 ///
-/// // Process still accessible until guard is dropped
+/// // Process info is still accessible
 /// assert!(store.get_process(200).is_some());
 ///
-/// // Explicit removal (optional)
-/// for guard in guards {
-///     guard.remove();
-/// }
+/// // When guards are dropped, process info is removed
+/// drop(guards);
 /// assert!(store.get_process(200).is_none());
 /// ```
 #[must_use = "returned guards must be stored or they will remove processes immediately"]
 pub fn handle_events<S: ProcessStore + Clone>(
     store: &S,
     events: &[ProcEvent],
-) -> Vec<ExitedProcessGuard<S>> {
+) -> Vec<ProcessExitGuard<S>> {
     let mut guards = Vec::new();
     for event in events {
         if let Some(guard) = handle_event(store, event) {
@@ -123,8 +121,9 @@ pub fn handle_events<S: ProcessStore + Clone>(
 
 /// Handle a single process lifecycle event.
 ///
-/// Returns `Some(ExitedProcessGuard)` for Exit events, `None` for other events.
-/// The guard automatically removes the process when dropped.
+/// Returns `Some(ProcessExitGuard)` for Exit events, `None` for other events.
+/// Returns a [`ProcessExitGuard`] that keeps the process info in the store
+/// until the guard is dropped.
 ///
 /// # Example
 ///
@@ -140,13 +139,13 @@ pub fn handle_events<S: ProcessStore + Clone>(
 ///     timestamp_ns: 0,
 /// });
 ///
-/// // Exit returns a guard
+/// // Exit returns a guard (process info stays in store)
 /// let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
 ///
-/// // Process still accessible
+/// // Process info is still accessible
 /// assert!(store.get_process(100).is_some());
 ///
-/// // Guard removes process when dropped
+/// // When guard is dropped, process info is removed
 /// drop(guard);
 /// assert!(store.get_process(100).is_none());
 /// ```
@@ -154,7 +153,7 @@ pub fn handle_events<S: ProcessStore + Clone>(
 pub fn handle_event<S: ProcessStore + Clone>(
     store: &S,
     event: &ProcEvent,
-) -> Option<ExitedProcessGuard<S>> {
+) -> Option<ProcessExitGuard<S>> {
     match event {
         ProcEvent::Fork {
             child_pid,
@@ -196,7 +195,7 @@ pub fn handle_event<S: ProcessStore + Clone>(
                 }
             }
             // Return guard for automatic cleanup
-            return Some(ExitedProcessGuard::new(store.clone(), *pid));
+            return Some(ProcessExitGuard::new(store.clone(), *pid));
         }
     }
     None

@@ -57,7 +57,7 @@ mod tree;
 mod types;
 
 // Public API — types
-pub use guard::ExitedProcessGuard;
+pub use guard::ProcessExitGuard;
 pub use types::ProcessInfo;
 
 // Public API — traits
