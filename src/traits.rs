@@ -19,14 +19,11 @@ pub trait TreeStore {
     /// Remove a tree node by PID. Returns the removed node.
     fn remove_node(&self, pid: u32) -> Option<PidNode>;
 
-    /// Get all PIDs in the tree (including historical).
+    /// Get all PIDs in the tree.
     fn all_pids(&self) -> Vec<u32>;
 
-    /// Get direct children of a PID (only active children).
+    /// Get direct children of a PID.
     fn children_of(&self, pid: u32) -> Vec<u32>;
-
-    /// Get only active (non-removed) PIDs.
-    fn active_pids(&self) -> Vec<u32>;
 }
 
 /// Trait for process info cache.

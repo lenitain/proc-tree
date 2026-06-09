@@ -17,7 +17,6 @@
 //! #     fn remove_node(&self, pid: u32) -> Option<PidNode> { None }
 //! #     fn all_pids(&self) -> Vec<u32> { vec![] }
 //! #     fn children_of(&self, pid: u32) -> Vec<u32> { vec![] }
-//! #     fn active_pids(&self) -> Vec<u32> { vec![] }
 //! # }
 //! # struct MyCache;
 //! # impl CacheStore for MyCache {

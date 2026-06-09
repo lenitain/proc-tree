@@ -72,7 +72,6 @@ fn len_inner<V>(inner: &Inner<V>) -> usize {
 pub struct DefaultStore<V> {
     inner: Inner<V>,
     children_index: Arc<Mutex<HashMap<u32, Vec<u32>>>>,
-    active_pids: Arc<Mutex<std::collections::HashSet<u32>>>,
     ttl: Duration,
 }
 
@@ -89,7 +88,6 @@ impl<V: Clone> DefaultStore<V> {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
             children_index: Arc::new(Mutex::new(HashMap::new())),
-            active_pids: Arc::new(Mutex::new(std::collections::HashSet::new())),
             ttl: Duration::from_secs(ttl_secs),
         }
     }
@@ -115,7 +113,6 @@ impl<V: Clone> Clone for DefaultStore<V> {
         Self {
             inner: Arc::clone(&self.inner),
             children_index: Arc::clone(&self.children_index),
-            active_pids: Arc::clone(&self.active_pids),
             ttl: self.ttl,
         }
     }
@@ -144,29 +141,22 @@ impl TreeStore for DefaultTree {
         index.entry(ppid)
             .or_insert_with(Vec::new)
             .push(pid);
-        
-        // Mark as active
-        self.active_pids.lock().unwrap().insert(pid);
     }
 
     fn remove_node(&self, pid: u32) -> Option<PidNode> {
-        // Get node info before removing from index
-        let node = self.inner.lock().unwrap().get(&pid).map(|e| e.value.clone());
+        // Remove from inner
+        let node = {
+            let mut map = self.inner.lock().unwrap();
+            map.remove(&pid).map(|e| e.value)
+        };
         
-        if node.is_some() {
-            // Remove from active PIDs
-            self.active_pids.lock().unwrap().remove(&pid);
-            // Remove from children index
-            if let Some(ref n) = node {
-                let mut index = self.children_index.lock().unwrap();
-                if let Some(children) = index.get_mut(&n.ppid) {
-                    children.retain(|&c| c != pid);
-                }
+        // Remove from children index
+        if let Some(ref n) = node {
+            let mut index = self.children_index.lock().unwrap();
+            if let Some(children) = index.get_mut(&n.ppid) {
+                children.retain(|&c| c != pid);
             }
         }
-        
-        // Note: We don't remove from inner (historical data)
-        // This preserves the node for chain lookups
         
         node
     }
@@ -183,10 +173,6 @@ impl TreeStore for DefaultTree {
             .get(&pid)
             .cloned()
             .unwrap_or_default()
-    }
-
-    fn active_pids(&self) -> Vec<u32> {
-        self.active_pids.lock().unwrap().iter().copied().collect()
     }
 }
 

@@ -130,7 +130,15 @@ pub fn handle_event(tree: &impl TreeStore, cache: &impl CacheStore, event: &Proc
             cache.insert_info(*pid, info);
         }
         ProcEvent::Exit { pid } => {
-            // Remove from active tree, but keep in historical data
+            // Orphan children to init (PID 1)
+            let children = tree.children_of(*pid);
+            for child_pid in children {
+                if let Some(mut node) = tree.get_node(child_pid) {
+                    node.ppid = 1;
+                    tree.insert_node(child_pid, node);
+                }
+            }
+            // Remove the node from tree
             tree.remove_node(*pid);
         }
     }

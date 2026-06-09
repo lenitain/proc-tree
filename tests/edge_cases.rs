@@ -88,8 +88,8 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     handle_event(&tree, &cache, &ProcEvent::Exit { pid });
-    // Process should still be in tree (preserved for chain lookups)
-    assert_eq!(tree_len(&tree), 1);
+    // Process should be removed from tree after exit
+    assert_eq!(tree_len(&tree), 0);
 }
 
 // ---- Chain with cycles ----
