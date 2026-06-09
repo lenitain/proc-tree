@@ -1,6 +1,9 @@
 //! Raw /proc reading for process tree construction.
 //!
-//! Only contains functions needed to build and maintain the process tree:
+//! These are internal functions used by the process tree operations.
+//! They are not part of the public API.
+//!
+//! Contains functions needed to build and maintain the process tree:
 //! comm (cmd name), status (ppid/user/tgid), stat (start_time), uid lookup.
 
 use std::collections::HashMap;
@@ -27,13 +30,11 @@ fn clock_ticks_per_sec() -> i64 {
 ///
 /// Returns `None` if the process doesn't exist or the file can't be read.
 ///
-/// ```no_run
-/// use proc_tree::read_proc_comm;
+/// # Internal Usage
 ///
-/// let comm = read_proc_comm(1).unwrap();
-/// assert!(!comm.is_empty()); // PID 1 is always init/systemd
-/// assert!(read_proc_comm(0xFFFF_FFFF).is_none());
-/// ```
+/// This function is used internally by `ops::resolve` and
+/// `ops::get_cmd` as a fallback when the command name is not
+/// in the store.
 pub fn read_proc_comm(pid: u32) -> Option<String> {
     let path = proc_path(pid, "comm");
     let mut buf = [0u8; 64];
@@ -57,14 +58,10 @@ fn proc_path(pid: u32, suffix: &str) -> ArrayString<32> {
 /// Returns 0 if the process doesn't exist or parsing fails.
 /// The value is jiffies-since-boot converted to nanoseconds.
 ///
-/// ```no_run
-/// use proc_tree::read_proc_start_time_ns;
+/// # Internal Usage
 ///
-/// let ns = read_proc_start_time_ns(1);
-/// assert!(ns > 0); // PID 1 always has a start time
-///
-/// assert_eq!(read_proc_start_time_ns(0xFFFF_FFFF), 0); // nonexistent
-/// ```
+/// This function is used internally by [`parse_proc_entry`] to populate
+/// the `start_time_ns` field of [`super::types::ProcessInfo`].
 pub fn read_proc_start_time_ns(pid: u32) -> u64 {
     let path = proc_path(pid, "stat");
     let stat = match std::fs::read_to_string(path.as_str()) {
@@ -125,6 +122,15 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
 /// Parse `/proc/{pid}/status` into a `ProcessInfo`.
 ///
 /// Returns `None` if the process doesn't exist or the status file can't be read.
+///
+/// # Internal Usage
+///
+/// This function is used internally by:
+/// - [`super::ops::snapshot`] to populate the store
+/// - [`super::ops::resolve`] as a fallback
+/// - [`super::ops::handle_event`] for Exec events
+/// - [`super::ops::build_chain_links`] for chain lookups
+/// - [`super::ops::find_by_cmd`] and [`super::ops::find_by_user`] for fallback
 pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
     let path = proc_path(pid, "status");
     let status = std::fs::read_to_string(path.as_str()).ok()?;
@@ -163,6 +169,11 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
 ///
 /// Results are cached after the first call. Returns `None` if the UID
 /// is not found in `/etc/passwd`.
+///
+/// # Internal Usage
+///
+/// This function is used internally by [`parse_proc_entry`] to populate
+/// the `user` field of [`super::types::ProcessInfo`].
 pub fn uid_to_username(uid: u32) -> Option<String> {
     uid_passwd_map().get(&uid).cloned()
 }
