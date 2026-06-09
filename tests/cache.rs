@@ -1,87 +1,83 @@
-//! Tests for cache behavior: PID reuse detection, resolve caching.
+//! Tests for resolve caching.
 
 use proc_tree::*;
 mod helpers;
-use helpers::{TestCache, TestTree};
+use helpers::TestStore;
 
 #[test]
 fn cache_hit_on_resolve() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
-    // First resolve populates cache
-    let info1 = resolve(&cache, 1).unwrap();
-    // Second resolve should hit cache
-    let info2 = resolve(&cache, 1).unwrap();
+    let store = TestStore::default();
+    snapshot(&store);
+    // First resolve populates store
+    let info1 = resolve(&store, 1).unwrap();
+    // Second resolve should hit store
+    let info2 = resolve(&store, 1).unwrap();
     assert_eq!(info1.cmd, info2.cmd);
     assert_eq!(info1.ppid, info2.ppid);
 }
 
 #[test]
-fn cache_updated_on_exec_event() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    // Fork creates tree node
+fn store_updated_on_exec_event() {
+    let store = TestStore::default();
+    // Fork creates process
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 200,
             parent_pid: 100,
             timestamp_ns: 12345,
         },
     );
-    // Exec updates cache with cmd info
+    // Exec updates store with cmd info
     // Note: this reads from /proc, so 200 must exist or it'll use "unknown"
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Exec {
             pid: 200,
             timestamp_ns: 12345,
         },
     );
-    // Cache should have entry for PID 200 (even if "unknown")
-    let info = resolve(&cache, 200);
+    // Store should have entry for PID 200 (even if "unknown")
+    let info = resolve(&store, 200);
     assert!(info.is_some(), "PID 200 should be resolvable after exec");
 }
 
 #[test]
-fn cache_preserves_on_exit() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
+fn store_removes_on_exit() {
+    let store = TestStore::default();
+    snapshot(&store);
     // Get info before exit
-    let info_before = resolve(&cache, 1).unwrap();
-    // Exit event should not remove from cache
-    handle_event(&tree, &cache, &ProcEvent::Exit { pid: 1 });
-    let info_after = resolve(&cache, 1).unwrap();
-    assert_eq!(info_before.cmd, info_after.cmd);
+    let info_before = resolve(&store, 1).unwrap();
+    // Exit event should remove from store
+    handle_event(&store, &ProcEvent::Exit { pid: 1 });
+    // After exit, resolve should fall back to /proc
+    let info_after = resolve(&store, 1);
+    // If PID 1 still exists in /proc, it should be resolvable
+    if let Some(info_after) = info_after {
+        assert_eq!(info_before.cmd, info_after.cmd);
+    }
 }
 
 #[test]
 fn tree_len_tracks_entries() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    assert_eq!(tree_len(&tree), 0);
+    let store = TestStore::default();
+    assert_eq!(tree_len(&store), 0);
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 100,
             parent_pid: 1,
             timestamp_ns: 0,
         },
     );
-    assert_eq!(tree_len(&tree), 1);
+    assert_eq!(tree_len(&store), 1);
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 200,
             parent_pid: 1,
             timestamp_ns: 0,
         },
     );
-    assert_eq!(tree_len(&tree), 2);
+    assert_eq!(tree_len(&store), 2);
 }

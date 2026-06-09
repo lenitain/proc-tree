@@ -1,3 +1,3 @@
-//! Test helper: re-export default stores with no TTL for test convenience.
+//! Test helper: re-export default store with no TTL for test convenience.
 
-pub use proc_tree::{DefaultCache as TestCache, DefaultTree as TestTree};
+pub use proc_tree::DefaultStore as TestStore;

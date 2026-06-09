@@ -1,8 +1,8 @@
 //! Data types for the process tree.
 
-/// Cached process info for a single PID.
+/// Process info for a single PID.
 #[derive(Clone, Debug)]
-pub struct ProcInfo {
+pub struct ProcessInfo {
     /// Command name (from `/proc/{pid}/comm`).
     pub cmd: String,
     /// Username (from UID lookup via `/etc/passwd`).
@@ -14,11 +14,4 @@ pub struct ProcInfo {
     /// Process start time in nanoseconds since boot.
     /// Used for PID reuse detection.
     pub start_time_ns: u64,
-}
-
-/// A node in the process tree.
-#[derive(Clone, Debug)]
-pub struct PidNode {
-    pub ppid: u32,
-    pub cmd: String,
 }

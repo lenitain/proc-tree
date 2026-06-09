@@ -2,26 +2,24 @@
 
 use proc_tree::*;
 mod helpers;
-use helpers::{TestCache, TestTree};
+use helpers::TestStore;
 
 // ---- PID 0 and special PIDs ----
 
 #[test]
 fn resolve_pid0() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
+    let store = TestStore::default();
+    snapshot(&store);
     // PID 0 doesn't exist as a process
-    let info = resolve(&cache, 0);
+    let info = resolve(&store, 0);
     assert!(info.is_none(), "PID 0 should not be resolvable");
 }
 
 #[test]
 fn build_chain_pid0() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
-    let chain = build_chain_links(&tree, &cache, 0);
+    let store = TestStore::default();
+    snapshot(&store);
+    let chain = build_chain_links(&store, 0);
     // PID 0 doesn't exist, should return empty or minimal chain
     let _ = chain; // just shouldn't panic
 }
@@ -30,30 +28,28 @@ fn build_chain_pid0() {
 
 #[test]
 fn resolve_max_pid() {
-    let cache = TestCache::default();
-    assert!(resolve(&cache, u32::MAX).is_none());
+    let store = TestStore::default();
+    assert!(resolve(&store, u32::MAX).is_none());
 }
 
 #[test]
 fn resolve_large_pid() {
-    let cache = TestCache::default();
-    assert!(resolve(&cache, 4_194_304).is_none()); // PID_MAX_DEFAULT
+    let store = TestStore::default();
+    assert!(resolve(&store, 4_194_304).is_none()); // PID_MAX_DEFAULT
 }
 
 // ---- Batch events ----
 
 #[test]
 fn handle_empty_events() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    handle_events(&tree, &cache, &[]);
-    assert_eq!(tree_len(&tree), 0);
+    let store = TestStore::default();
+    handle_events(&store, &[]);
+    assert_eq!(tree_len(&store), 0);
 }
 
 #[test]
 fn handle_many_forks() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
+    let store = TestStore::default();
     let events: Vec<ProcEvent> = (1000..2000)
         .map(|i| ProcEvent::Fork {
             child_pid: i,
@@ -61,18 +57,16 @@ fn handle_many_forks() {
             timestamp_ns: 0,
         })
         .collect();
-    handle_events(&tree, &cache, &events);
-    assert_eq!(tree_len(&tree), 1000);
+    handle_events(&store, &events);
+    assert_eq!(tree_len(&store), 1000);
 }
 
 #[test]
 fn handle_fork_then_exec_then_exit() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
+    let store = TestStore::default();
     let pid = 5000;
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: pid,
             parent_pid: 1,
@@ -80,28 +74,25 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Exec {
             pid,
             timestamp_ns: 200,
         },
     );
-    handle_event(&tree, &cache, &ProcEvent::Exit { pid });
-    // Process should be removed from tree after exit
-    assert_eq!(tree_len(&tree), 0);
+    handle_event(&store, &ProcEvent::Exit { pid });
+    // Process should be removed from store after exit
+    assert_eq!(tree_len(&store), 0);
 }
 
 // ---- Chain with cycles ----
 
 #[test]
 fn build_chain_with_cycle() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
+    let store = TestStore::default();
     // Create a cycle: 1 → 2 → 3 → 1
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 2,
             parent_pid: 1,
@@ -109,8 +100,7 @@ fn build_chain_with_cycle() {
         },
     );
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 3,
             parent_pid: 2,
@@ -120,18 +110,16 @@ fn build_chain_with_cycle() {
     // Manually create cycle by re-pointing 1's parent to 3
     // (We can't do this via public API, but we can test that
     //  the chain terminates correctly with real /proc data)
-    let chain = build_chain_links(&tree, &cache, 3);
+    let chain = build_chain_links(&store, 3);
     // Should not infinite loop
     assert!(chain.len() <= 3);
 }
 
 #[test]
 fn is_descendant_with_cycle() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
+    let store = TestStore::default();
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 2,
             parent_pid: 1,
@@ -139,7 +127,7 @@ fn is_descendant_with_cycle() {
         },
     );
     // Should not infinite loop
-    let _ = is_descendant(&tree, 2, "anything");
+    let _ = is_descendant(&store, 2, "anything");
 }
 
 // ---- ProcessLink ----

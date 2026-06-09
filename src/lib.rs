@@ -6,41 +6,35 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use proc_tree::{TreeStore, CacheStore, PidNode, ProcInfo, ProcEvent};
+//! use proc_tree::{ProcessStore, ProcessInfo, ProcEvent};
 //! use proc_tree::{snapshot, resolve, handle_events, build_chain_string};
 //!
 //! // Implement your own storage (or use a provided example)
-//! # struct MyTree;
-//! # impl TreeStore for MyTree {
-//! #     fn get_node(&self, pid: u32) -> Option<PidNode> { None }
-//! #     fn insert_node(&self, pid: u32, node: PidNode) {}
-//! #     fn remove_node(&self, pid: u32) -> Option<PidNode> { None }
+//! # struct MyStore;
+//! # impl ProcessStore for MyStore {
+//! #     fn get_process(&self, pid: u32) -> Option<ProcessInfo> { None }
+//! #     fn insert_process(&self, pid: u32, info: ProcessInfo) {}
+//! #     fn remove_process(&self, pid: u32) -> Option<ProcessInfo> { None }
 //! #     fn all_pids(&self) -> Vec<u32> { vec![] }
 //! #     fn children_of(&self, pid: u32) -> Vec<u32> { vec![] }
 //! # }
-//! # struct MyCache;
-//! # impl CacheStore for MyCache {
-//! #     fn get_info(&self, pid: u32) -> Option<ProcInfo> { None }
-//! #     fn insert_info(&self, pid: u32, info: ProcInfo) {}
-//! }
 //!
-//! let tree = MyTree;
-//! let cache = MyCache;
+//! let store = MyStore;
 //!
 //! // Seed from /proc
-//! snapshot(&tree, &cache);
+//! snapshot(&store);
 //!
 //! // Resolve a PID
-//! if let Some(info) = resolve(&cache, 1) {
+//! if let Some(info) = resolve(&store, 1) {
 //!     println!("PID 1: cmd={}, user={}", info.cmd, info.user);
 //! }
 //!
 //! // Build ancestry chain
-//! let s = build_chain_string(&tree, &cache, 1234);
+//! let s = build_chain_string(&store, 1234);
 //! println!("Chain: {}", s);
 //!
 //! // Handle events
-//! handle_events(&tree, &cache, &[
+//! handle_events(&store, &[
 //!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 //! ]);
 //! ```
@@ -48,7 +42,7 @@
 //! ## PID Reuse Detection
 //!
 //! When a process exits and its PID is reused by a new process, cached data
-//! becomes stale. `CacheStore` implementations should compare `start_time_ns`
+//! becomes stale. `ProcessStore` implementations should compare `start_time_ns`
 //! with the current `/proc` value to detect reuse.
 
 mod default_store;
@@ -59,13 +53,13 @@ mod tree;
 mod types;
 
 // Public API — types
-pub use types::{PidNode, ProcInfo};
+pub use types::ProcessInfo;
 
 // Public API — traits
-pub use traits::{CacheStore, TreeStore};
+pub use traits::ProcessStore;
 
 // Public API — default implementations
-pub use default_store::{DefaultCache, DefaultStore, DefaultTree};
+pub use default_store::DefaultStore;
 
 // Public API — tree types
 pub use tree::{ProcEvent, ProcessLink};

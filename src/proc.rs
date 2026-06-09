@@ -122,10 +122,10 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
     })
 }
 
-/// Parse `/proc/{pid}/status` into a `(PidNode, ProcInfo)` pair.
+/// Parse `/proc/{pid}/status` into a `ProcessInfo`.
 ///
 /// Returns `None` if the process doesn't exist or the status file can't be read.
-pub fn parse_proc_entry(pid: u32) -> Option<(crate::types::PidNode, crate::types::ProcInfo)> {
+pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
     let path = proc_path(pid, "status");
     let status = std::fs::read_to_string(path.as_str()).ok()?;
     let mut ppid = 0u32;
@@ -150,19 +150,13 @@ pub fn parse_proc_entry(pid: u32) -> Option<(crate::types::PidNode, crate::types
         }
     }
     let start_time_ns = read_proc_start_time_ns(pid);
-    Some((
-        crate::types::PidNode {
-            ppid,
-            cmd: cmd.clone(),
-        },
-        crate::types::ProcInfo {
-            cmd,
-            user,
-            ppid,
-            tgid,
-            start_time_ns,
-        },
-    ))
+    Some(crate::types::ProcessInfo {
+        cmd,
+        user,
+        ppid,
+        tgid,
+        start_time_ns,
+    })
 }
 
 /// Convert a UID to a username by looking up `/etc/passwd`.

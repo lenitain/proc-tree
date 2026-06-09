@@ -1,32 +1,31 @@
-//! Default storage implementations using standard library types.
+//! Default storage implementation using standard library types.
 //!
-//! [`DefaultStore<V>`] is a generic `HashMap<Mutex>` store with optional
-//! TTL-based eviction. [`DefaultTree`] and [`DefaultCache`] are type aliases.
+//! [`DefaultStore`] is a `HashMap<Mutex>` store with optional TTL-based eviction.
 //!
 //! # Example
 //!
 //! ```rust
-//! use proc_tree::{DefaultTree, DefaultCache, snapshot};
+//! use proc_tree::{DefaultStore, snapshot};
 //!
-//! let tree = DefaultTree::new(65536, 600);
-//! let cache = DefaultCache::new(65536, 600);
-//! snapshot(&tree, &cache);
+//! let store = DefaultStore::new(65536, 600);
+//! snapshot(&store);
 //! ```
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::{CacheStore, PidNode, ProcInfo, TreeStore};
+use crate::traits::ProcessStore;
+use crate::types::ProcessInfo;
 
 // ---- Internal entry with optional TTL ----
 
-struct Entry<V> {
-    value: V,
+struct Entry {
+    value: ProcessInfo,
     inserted_at: Instant,
 }
 
-impl<V: Clone> Clone for Entry<V> {
+impl Clone for Entry {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -37,9 +36,9 @@ impl<V: Clone> Clone for Entry<V> {
 
 // ---- Shared inner ----
 
-type Inner<V> = Arc<Mutex<HashMap<u32, Entry<V>>>>;
+type Inner = Arc<Mutex<HashMap<u32, Entry>>>;
 
-fn get_inner<V: Clone>(inner: &Inner<V>, pid: u32, ttl: Duration) -> Option<V> {
+fn get_inner(inner: &Inner, pid: u32, ttl: Duration) -> Option<ProcessInfo> {
     let mut map = inner.lock().unwrap();
     let entry = map.get(&pid)?;
     if !ttl.is_zero() && entry.inserted_at.elapsed() >= ttl {
@@ -49,7 +48,7 @@ fn get_inner<V: Clone>(inner: &Inner<V>, pid: u32, ttl: Duration) -> Option<V> {
     Some(entry.value.clone())
 }
 
-fn insert_inner<V: Clone>(inner: &Inner<V>, pid: u32, value: V) {
+fn insert_inner(inner: &Inner, pid: u32, value: ProcessInfo) {
     let mut map = inner.lock().unwrap();
     map.insert(
         pid,
@@ -60,28 +59,18 @@ fn insert_inner<V: Clone>(inner: &Inner<V>, pid: u32, value: V) {
     );
 }
 
-fn len_inner<V>(inner: &Inner<V>) -> usize {
-    inner.lock().unwrap().len()
-}
+// ---- DefaultStore ----
 
-// ---- DefaultStore<V> ----
-
-/// Generic store backed by `HashMap<Mutex>` with optional TTL eviction.
+/// Process tree store backed by `HashMap<Mutex>` with optional TTL eviction.
 ///
 /// Thread-safe via `Arc<Mutex<...>>`. Cloning shares the same data.
-pub struct DefaultStore<V> {
-    inner: Inner<V>,
+pub struct DefaultStore {
+    inner: Inner,
     children_index: Arc<Mutex<HashMap<u32, Vec<u32>>>>,
     ttl: Duration,
 }
 
-/// Process tree store. See [`DefaultStore`].
-pub type DefaultTree = DefaultStore<PidNode>;
-
-/// Process info cache. See [`DefaultStore`].
-pub type DefaultCache = DefaultStore<ProcInfo>;
-
-impl<V: Clone> DefaultStore<V> {
+impl DefaultStore {
     /// Create a new store with the given capacity hint and TTL in seconds.
     /// `ttl_secs = 0` means no expiration.
     pub fn new(_capacity: u64, ttl_secs: u64) -> Self {
@@ -94,7 +83,7 @@ impl<V: Clone> DefaultStore<V> {
 
     /// Number of entries (including possibly-expired ones not yet evicted).
     pub fn len(&self) -> usize {
-        len_inner(&self.inner)
+        self.inner.lock().unwrap().len()
     }
 
     /// Returns `true` if the store contains no entries.
@@ -108,7 +97,7 @@ impl<V: Clone> DefaultStore<V> {
     }
 }
 
-impl<V: Clone> Clone for DefaultStore<V> {
+impl Clone for DefaultStore {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
@@ -118,45 +107,45 @@ impl<V: Clone> Clone for DefaultStore<V> {
     }
 }
 
-impl<V: Clone> Default for DefaultStore<V> {
+impl Default for DefaultStore {
     /// Creates a store with capacity 100 and no TTL.
     fn default() -> Self {
         Self::new(100, 0)
     }
 }
 
-impl TreeStore for DefaultTree {
-    fn get_node(&self, pid: u32) -> Option<PidNode> {
+impl ProcessStore for DefaultStore {
+    fn get_process(&self, pid: u32) -> Option<ProcessInfo> {
         get_inner(&self.inner, pid, self.ttl)
     }
 
-    fn insert_node(&self, pid: u32, node: PidNode) {
-        let ppid = node.ppid;
+    fn insert_process(&self, pid: u32, info: ProcessInfo) {
+        let ppid = info.ppid;
 
-        // Insert the node
-        insert_inner(&self.inner, pid, node);
+        // Insert the process
+        insert_inner(&self.inner, pid, info);
 
         // Update children index
         let mut index = self.children_index.lock().unwrap();
         index.entry(ppid).or_insert_with(Vec::new).push(pid);
     }
 
-    fn remove_node(&self, pid: u32) -> Option<PidNode> {
+    fn remove_process(&self, pid: u32) -> Option<ProcessInfo> {
         // Remove from inner
-        let node = {
+        let info = {
             let mut map = self.inner.lock().unwrap();
             map.remove(&pid).map(|e| e.value)
         };
 
         // Remove from children index
-        if let Some(ref n) = node {
+        if let Some(ref p) = info {
             let mut index = self.children_index.lock().unwrap();
-            if let Some(children) = index.get_mut(&n.ppid) {
+            if let Some(children) = index.get_mut(&p.ppid) {
                 children.retain(|&c| c != pid);
             }
         }
 
-        node
+        info
     }
 
     fn all_pids(&self) -> Vec<u32> {
@@ -174,220 +163,264 @@ impl TreeStore for DefaultTree {
     }
 }
 
-impl CacheStore for DefaultCache {
-    fn get_info(&self, pid: u32) -> Option<ProcInfo> {
-        get_inner(&self.inner, pid, self.ttl)
-    }
-
-    fn insert_info(&self, pid: u32, info: ProcInfo) {
-        insert_inner(&self.inner, pid, info);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn default_tree_insert_get() {
-        let tree = DefaultTree::new(100, 0);
-        tree.insert_node(
+    fn default_store_insert_get() {
+        let store = DefaultStore::new(100, 0);
+        store.insert_process(
             1,
-            PidNode {
+            ProcessInfo {
                 ppid: 0,
                 cmd: "init".into(),
-            },
-        );
-        let node = tree.get_node(1).unwrap();
-        assert_eq!(node.ppid, 0);
-        assert_eq!(node.cmd, "init");
-    }
-
-    #[test]
-    fn default_tree_ttl_expired() {
-        let tree = DefaultTree::new(100, 0); // ttl=0 means no expiry
-        tree.insert_node(
-            1,
-            PidNode {
-                ppid: 0,
-                cmd: "init".into(),
-            },
-        );
-        assert!(tree.get_node(1).is_some());
-
-        // With ttl=1, entry expires after 1 second
-        let tree = DefaultTree::new(100, 1);
-        tree.insert_node(
-            1,
-            PidNode {
-                ppid: 0,
-                cmd: "init".into(),
-            },
-        );
-        assert!(tree.get_node(1).is_some());
-        std::thread::sleep(Duration::from_millis(1100));
-        assert!(tree.get_node(1).is_none());
-    }
-
-    #[test]
-    fn default_cache_insert_get() {
-        let cache = DefaultCache::new(100, 0);
-        cache.insert_info(
-            42,
-            ProcInfo {
-                cmd: "bash".into(),
                 user: "root".into(),
-                ppid: 1,
-                tgid: 42,
+                tgid: 1,
                 start_time_ns: 0,
             },
         );
-        let info = cache.get_info(42).unwrap();
-        assert_eq!(info.cmd, "bash");
-        assert_eq!(info.ppid, 1);
+        let info = store.get_process(1).unwrap();
+        assert_eq!(info.ppid, 0);
+        assert_eq!(info.cmd, "init");
+    }
+
+    #[test]
+    fn default_store_ttl_expired() {
+        let store = DefaultStore::new(100, 0); // ttl=0 means no expiry
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        assert!(store.get_process(1).is_some());
+
+        // With ttl=1, entry expires after 1 second
+        let store = DefaultStore::new(100, 1);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        assert!(store.get_process(1).is_some());
+        std::thread::sleep(Duration::from_millis(1100));
+        assert!(store.get_process(1).is_none());
     }
 
     #[test]
     fn clone_shares_data() {
-        let tree = DefaultTree::new(100, 0);
-        tree.insert_node(
+        let store = DefaultStore::new(100, 0);
+        store.insert_process(
             1,
-            PidNode {
+            ProcessInfo {
                 ppid: 0,
                 cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
             },
         );
-        let tree2 = tree.clone();
-        assert!(tree2.get_node(1).is_some());
-        tree2.insert_node(
+        let store2 = store.clone();
+        assert!(store2.get_process(1).is_some());
+        store2.insert_process(
             2,
-            PidNode {
+            ProcessInfo {
                 ppid: 1,
                 cmd: "bash".into(),
+                user: "root".into(),
+                tgid: 2,
+                start_time_ns: 0,
             },
         );
-        assert!(tree.get_node(2).is_some());
+        assert!(store.get_process(2).is_some());
     }
 
     #[test]
     fn len_and_contains() {
-        let cache = DefaultCache::new(100, 0);
-        assert_eq!(cache.len(), 0);
-        cache.insert_info(
+        let store = DefaultStore::new(100, 0);
+        assert_eq!(store.len(), 0);
+        store.insert_process(
             1,
-            ProcInfo {
+            ProcessInfo {
+                ppid: 0,
                 cmd: "a".into(),
                 user: "u".into(),
-                ppid: 0,
                 tgid: 1,
                 start_time_ns: 0,
             },
         );
-        assert_eq!(cache.len(), 1);
-        assert!(cache.contains_key(1));
-        assert!(!cache.contains_key(999));
-    }
-
-    #[test]
-    fn default_cache_ttl_expired() {
-        let cache = DefaultCache::new(100, 0);
-        cache.insert_info(
-            1,
-            ProcInfo {
-                cmd: "a".into(),
-                user: "u".into(),
-                ppid: 0,
-                tgid: 1,
-                start_time_ns: 0,
-            },
-        );
-        assert!(cache.get_info(1).is_some());
-
-        let cache = DefaultCache::new(100, 1);
-        cache.insert_info(
-            1,
-            ProcInfo {
-                cmd: "a".into(),
-                user: "u".into(),
-                ppid: 0,
-                tgid: 1,
-                start_time_ns: 0,
-            },
-        );
-        assert!(cache.get_info(1).is_some());
-        std::thread::sleep(Duration::from_millis(1100));
-        assert!(cache.get_info(1).is_none());
+        assert_eq!(store.len(), 1);
+        assert!(store.contains_key(1));
+        assert!(!store.contains_key(999));
     }
 
     #[test]
     fn is_empty_default() {
-        let tree = DefaultTree::new(100, 0);
-        assert!(tree.is_empty());
-        tree.insert_node(
+        let store = DefaultStore::new(100, 0);
+        assert!(store.is_empty());
+        store.insert_process(
             1,
-            PidNode {
+            ProcessInfo {
                 ppid: 0,
-                cmd: "init".into(),
-            },
-        );
-        assert!(!tree.is_empty());
-
-        let cache = DefaultCache::new(100, 0);
-        assert!(cache.is_empty());
-        cache.insert_info(
-            1,
-            ProcInfo {
                 cmd: "a".into(),
                 user: "u".into(),
-                ppid: 0,
                 tgid: 1,
                 start_time_ns: 0,
             },
         );
-        assert!(!cache.is_empty());
+        assert!(!store.is_empty());
     }
 
     #[test]
     fn all_pids_returns_keys() {
-        let tree = DefaultTree::new(100, 0);
-        tree.insert_node(
+        let store = DefaultStore::new(100, 0);
+        store.insert_process(
             1,
-            PidNode {
+            ProcessInfo {
                 ppid: 0,
                 cmd: "a".into(),
+                user: "u".into(),
+                tgid: 1,
+                start_time_ns: 0,
             },
         );
-        tree.insert_node(
+        store.insert_process(
             2,
-            PidNode {
+            ProcessInfo {
                 ppid: 1,
                 cmd: "b".into(),
+                user: "u".into(),
+                tgid: 2,
+                start_time_ns: 0,
             },
         );
-        tree.insert_node(
+        store.insert_process(
             3,
-            PidNode {
+            ProcessInfo {
                 ppid: 1,
                 cmd: "c".into(),
+                user: "u".into(),
+                tgid: 3,
+                start_time_ns: 0,
             },
         );
-        let mut pids = tree.all_pids();
+        let mut pids = store.all_pids();
         pids.sort();
         assert_eq!(pids, vec![1, 2, 3]);
     }
 
     #[test]
-    fn tree_ttl_contains_key_expires() {
-        let tree = DefaultTree::new(100, 1);
-        tree.insert_node(
+    fn ttl_contains_key_expires() {
+        let store = DefaultStore::new(100, 1);
+        store.insert_process(
             1,
-            PidNode {
+            ProcessInfo {
                 ppid: 0,
                 cmd: "a".into(),
+                user: "u".into(),
+                tgid: 1,
+                start_time_ns: 0,
             },
         );
-        assert!(tree.contains_key(1));
+        assert!(store.contains_key(1));
         std::thread::sleep(Duration::from_millis(1100));
-        assert!(!tree.contains_key(1));
+        assert!(!store.contains_key(1));
+    }
+
+    #[test]
+    fn remove_process() {
+        let store = DefaultStore::new(100, 0);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            2,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "bash".into(),
+                user: "root".into(),
+                tgid: 2,
+                start_time_ns: 0,
+            },
+        );
+
+        assert_eq!(store.len(), 2);
+        assert!(store.contains_key(2));
+
+        let removed = store.remove_process(2);
+        assert!(removed.is_some());
+        assert_eq!(store.len(), 1);
+        assert!(!store.contains_key(2));
+    }
+
+    #[test]
+    fn children_of() {
+        let store = DefaultStore::new(100, 0);
+        store.insert_process(
+            1,
+            ProcessInfo {
+                ppid: 0,
+                cmd: "init".into(),
+                user: "root".into(),
+                tgid: 1,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            100,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "a".into(),
+                user: "root".into(),
+                tgid: 100,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            200,
+            ProcessInfo {
+                ppid: 1,
+                cmd: "b".into(),
+                user: "root".into(),
+                tgid: 200,
+                start_time_ns: 0,
+            },
+        );
+        store.insert_process(
+            300,
+            ProcessInfo {
+                ppid: 100,
+                cmd: "c".into(),
+                user: "root".into(),
+                tgid: 300,
+                start_time_ns: 0,
+            },
+        );
+
+        let mut kids = store.children_of(1);
+        kids.sort();
+        assert_eq!(kids, vec![100, 200]);
+
+        let kids_100 = store.children_of(100);
+        assert_eq!(kids_100, vec![300]);
+
+        assert!(store.children_of(999).is_empty());
     }
 }

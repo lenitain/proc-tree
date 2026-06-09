@@ -2,7 +2,7 @@
 
 use proc_tree::*;
 mod helpers;
-use helpers::{TestCache, TestTree};
+use helpers::TestStore;
 
 #[test]
 fn process_link_display_format() {
@@ -26,11 +26,10 @@ fn process_link_display_special_chars() {
 
 #[test]
 fn chain_string_semicolon_separated() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
+    let store = TestStore::default();
+    snapshot(&store);
     let my_pid = std::process::id();
-    let s = build_chain_string(&tree, &cache, my_pid);
+    let s = build_chain_string(&store, my_pid);
     // Should contain semicolons between links
     let parts: Vec<&str> = s.split(';').collect();
     assert!(parts.len() > 1, "chain should have multiple links");
@@ -38,10 +37,9 @@ fn chain_string_semicolon_separated() {
 
 #[test]
 fn chain_string_each_link_has_pipes() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
-    let s = build_chain_string(&tree, &cache, 1);
+    let store = TestStore::default();
+    snapshot(&store);
+    let s = build_chain_string(&store, 1);
     let parts: Vec<&str> = s.split(';').collect();
     for part in &parts {
         let fields: Vec<&str> = part.split('|').collect();
@@ -51,29 +49,26 @@ fn chain_string_each_link_has_pipes() {
 
 #[test]
 fn display_single_process() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
+    let store = TestStore::default();
     // Manually add a single process via fork
     handle_event(
-        &tree,
-        &cache,
+        &store,
         &ProcEvent::Fork {
             child_pid: 999,
             parent_pid: 0,
             timestamp_ns: 0,
         },
     );
-    let d = display(&tree, 999);
+    let d = display(&store, 999);
     // Single process display should just be the cmd (or "unknown" if no exec)
     assert!(!d.is_empty());
 }
 
 #[test]
 fn display_with_children() {
-    let tree = TestTree::default();
-    let cache = TestCache::default();
-    snapshot(&tree, &cache);
-    let d = display(&tree, 1);
+    let store = TestStore::default();
+    snapshot(&store);
+    let d = display(&store, 1);
     // Should contain tree characters
     assert!(
         d.contains("─") || d.contains("init") || d.contains("systemd"),
@@ -84,8 +79,8 @@ fn display_with_children() {
 
 #[test]
 fn display_nonexistent_pid() {
-    let tree = TestTree::default();
-    let d = display(&tree, 0x7FFFFFFF);
+    let store = TestStore::default();
+    let d = display(&store, 0x7FFFFFFF);
     // Should return "unknown" or similar
     assert!(!d.is_empty(), "display should handle nonexistent PID");
 }
