@@ -132,15 +132,13 @@ impl TreeStore for DefaultTree {
 
     fn insert_node(&self, pid: u32, node: PidNode) {
         let ppid = node.ppid;
-        
+
         // Insert the node
         insert_inner(&self.inner, pid, node);
-        
+
         // Update children index
         let mut index = self.children_index.lock().unwrap();
-        index.entry(ppid)
-            .or_insert_with(Vec::new)
-            .push(pid);
+        index.entry(ppid).or_insert_with(Vec::new).push(pid);
     }
 
     fn remove_node(&self, pid: u32) -> Option<PidNode> {
@@ -149,7 +147,7 @@ impl TreeStore for DefaultTree {
             let mut map = self.inner.lock().unwrap();
             map.remove(&pid).map(|e| e.value)
         };
-        
+
         // Remove from children index
         if let Some(ref n) = node {
             let mut index = self.children_index.lock().unwrap();
@@ -157,7 +155,7 @@ impl TreeStore for DefaultTree {
                 children.retain(|&c| c != pid);
             }
         }
-        
+
         node
     }
 
