@@ -127,7 +127,7 @@ impl ProcessStore for DefaultStore {
 
         // Update children index
         let mut index = self.children_index.lock().unwrap();
-        index.entry(ppid).or_insert_with(Vec::new).push(pid);
+        index.entry(ppid).or_default().push(pid);
     }
 
     fn remove_process(&self, pid: u32) -> Option<ProcessInfo> {
