@@ -109,6 +109,7 @@ fn resolve_process_info(store: &impl ProcessStore, pid: u32) -> Option<ProcessIn
 /// }
 /// assert!(store.get_process(200).is_none());
 /// ```
+#[must_use = "call .remove(&store) on each ExitedProcess after processing related events"]
 pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<ExitedProcess> {
     let mut exited = Vec::new();
     for event in events {
@@ -148,6 +149,7 @@ pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<Exi
 /// exited.remove(&store);
 /// assert!(store.get_process(100).is_none());
 /// ```
+#[must_use = "call .remove(&store) after processing related events"]
 pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<ExitedProcess> {
     match event {
         ProcEvent::Fork {

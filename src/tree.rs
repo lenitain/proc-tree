@@ -50,12 +50,18 @@ pub enum ProcEvent {
 /// assert!(store.get_process(100).is_none());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "call .remove(&store) after processing related events, or the process stays in store until TTL expires"]
 pub struct ExitedProcess {
     /// The PID of the exited process.
     pub pid: u32,
 }
 
 impl ExitedProcess {
+    /// Get the PID of the exited process.
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
     /// Remove this process from the store.
     ///
     /// Call this after all related events have been processed.
