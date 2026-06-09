@@ -274,6 +274,8 @@ while let Some(entry) = delayed_queue.front() {
 | 🔴 P0 | TTL 过期不清理自身 children_index | 查询返回幽灵 PID | 中 |
 | 🔴 P0 | Exit 孤儿化导致 children_index 双重归属 | children() 返回错误结果 | 中 |
 | 🟡 P1 | Exec 覆盖 start_time_ns | PID 复用检测失效 | 低 |
+| ✅ 已修复 | children_index 一致性 | — | — |
+| ✅ 已修复 | ExitedProcess 显式移除 | — | — |
 | 🟡 P1 | fsmon 不主动清理已退出进程 | 高 churn 下 store 膨胀 | 中 |
 | 🟢 P2 | 文档与实现不一致 | 用户困惑 | 低 |
 | 🟢 P2 | contains_key/len 行为不一致 | API 可预测性 | 低 |
@@ -281,7 +283,30 @@ while let Some(entry) = delayed_queue.front() {
 
 ---
 
-## 七、测试运行结果
+## 七、已修复问题
+
+### ✅ children_index 一致性（原 P0）
+
+三处改动解决同一根因：
+
+- `insert_process`：检测 ppid 变更，从旧父的 index 移除
+- `insert_process`：防止重复插入产生重复条目
+- `remove_process`：清理自身 children_index 条目
+- `get_inner`（TTL 过期）：清理自身 children_index 条目
+
+### ✅ ExitedProcess 显式移除（原 P1）
+
+新增 `ExitedProcess` 结构体，替代原始 `u32` PID 返回值：
+
+- `handle_event()` 返回 `Option<ExitedProcess>`
+- `handle_events()` 返回 `Vec<ExitedProcess>`
+- 调用方通过 `ExitedProcess::remove(store)` 显式移除
+- 进程信息在 `remove()` 之前保留在 store 中
+- TTL 保留作为安全网
+
+---
+
+## 八、测试运行结果
 
 ```
 单元测试：20 passed, 0 failed
