@@ -28,7 +28,7 @@ fn clock_ticks_per_sec() -> i64 {
 /// Returns `None` if the process doesn't exist or the file can't be read.
 ///
 /// ```no_run
-/// use proc_tree::proc::read_proc_comm;
+/// use proc_tree::read_proc_comm;
 ///
 /// let comm = read_proc_comm(1).unwrap();
 /// assert!(!comm.is_empty()); // PID 1 is always init/systemd
@@ -58,7 +58,7 @@ fn proc_path(pid: u32, suffix: &str) -> ArrayString<32> {
 /// The value is jiffies-since-boot converted to nanoseconds.
 ///
 /// ```no_run
-/// use proc_tree::proc::read_proc_start_time_ns;
+/// use proc_tree::read_proc_start_time_ns;
 ///
 /// let ns = read_proc_start_time_ns(1);
 /// assert!(ns > 0); // PID 1 always has a start time
@@ -169,13 +169,6 @@ pub fn parse_proc_entry(pid: u32) -> Option<(crate::types::PidNode, crate::types
 ///
 /// Results are cached after the first call. Returns `None` if the UID
 /// is not found in `/etc/passwd`.
-///
-/// ```no_run
-/// use proc_tree::proc::uid_to_username;
-///
-/// assert_eq!(uid_to_username(0).as_deref(), Some("root"));
-/// assert!(uid_to_username(0xFFFF_FFFF).is_none());
-/// ```
 pub fn uid_to_username(uid: u32) -> Option<String> {
     uid_passwd_map().get(&uid).cloned()
 }

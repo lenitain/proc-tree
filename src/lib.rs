@@ -53,7 +53,7 @@
 
 mod default_store;
 mod ops;
-pub mod proc;
+mod proc;
 mod traits;
 mod tree;
 mod types;
@@ -78,4 +78,4 @@ pub use ops::{
 };
 
 // Public API — proc utilities
-pub use proc::{parse_proc_entry, read_proc_start_time_ns};
+pub use proc::{parse_proc_entry, read_proc_comm, read_proc_start_time_ns};
