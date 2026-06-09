@@ -510,7 +510,10 @@ mod tests {
         );
 
         // 200 should be removed from old parent's index
-        assert!(store.children_of(100).is_empty(), "old parent should have no children");
+        assert!(
+            store.children_of(100).is_empty(),
+            "old parent should have no children"
+        );
         // 200 should be in new parent's index
         assert_eq!(store.children_of(1), vec![200]);
     }
@@ -593,7 +596,10 @@ mod tests {
         store.remove_process(100);
 
         // children_of(100) should return empty, not stale [200]
-        assert!(store.children_of(100).is_empty(), "removed process should have no children index");
+        assert!(
+            store.children_of(100).is_empty(),
+            "removed process should have no children index"
+        );
         // Child 200 still exists in store but parent is gone
         assert!(store.get_process(200).is_some());
     }
@@ -641,6 +647,9 @@ mod tests {
         assert!(store.get_process(100).is_none());
 
         // children_of(100) should return empty, not stale [200]
-        assert!(store.children_of(100).is_empty(), "expired process should have no children index");
+        assert!(
+            store.children_of(100).is_empty(),
+            "expired process should have no children index"
+        );
     }
 }
