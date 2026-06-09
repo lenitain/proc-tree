@@ -5,25 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2026-06-09
+## [Unreleased] - 2026-06-09
+
+### Added
+
+- **`ExitedProcess` handle**: explicit removal mechanism for exited processes
+  - `handle_event()` returns `Option<ExitedProcess>` instead of `Option<u32>`
+  - `handle_events()` returns `Vec<ExitedProcess>` instead of `Vec<u32>`
+  - `ExitedProcess::remove(store)` explicitly removes process from store
+  - `ExitedProcess::pid()` getter for reading PID without consuming
+  - `#[must_use]` on `ExitedProcess`, `handle_event`, `handle_events` to prevent accidental ignoring
 
 ### Changed
 
 - **Unified storage interface**: merged `TreeStore` and `CacheStore` into single `ProcessStore` trait
 - **Unified data type**: merged `PidNode` and `ProcInfo` into single `ProcessInfo` struct
 - **Unified store**: `DefaultStore` replaces `DefaultTree` and `DefaultCache`
-- **Correct process tree semantics**: Exit event now removes process and orphans children to init (PID 1)
 - **O(1) child lookups**: added `children_index` for efficient child process queries
 - **Removed capacity parameter**: `DefaultStore::new(ttl_secs)` instead of `DefaultStore::new(capacity, ttl_secs)`
 - **Private proc module**: internal `/proc` reading functions no longer exposed in public API
 - **Improved documentation**: added internal usage notes for proc module functions
-
-### Added
-
-- `ProcessStore` trait with `remove_process()` and `children_of()` methods
-- `ProcessInfo` struct combining tree node and process info
-- `children_index` in `DefaultStore` for O(1) child lookups
-- Cycle detection in `is_descendant()` and `build_chain_links()`
+- **Process tree semantics**: Exit event returns `ExitedProcess` handle; process stays in store until explicit removal
 
 ### Removed
 
@@ -37,7 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Semantic correctness**: process tree now only contains living processes
+- **`children_index` consistency**: ppid changes now properly update both old and new parent's index
+  - `insert_process` detects ppid change and removes from old parent's index
+  - `insert_process` prevents duplicate entries when re-inserting same ppid
+  - `remove_process` cleans up own children_index entry
+  - TTL expiration cleans up own children_index entry
+- **PID reuse detection**: Exec handler no longer overwrites `start_time_ns` from `/proc` with event timestamp
+- **API consistency**: `contains_key()` no longer triggers TTL eviction, consistent with `len()`
 - **Clippy warnings**: replaced `or_insert_with(Vec::new)` with `or_default()`
 
 ## [0.1.1] - 2026-06-06
