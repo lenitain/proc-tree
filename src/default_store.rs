@@ -38,7 +38,12 @@ impl Clone for Entry {
 
 type Inner = Arc<Mutex<HashMap<u32, Entry>>>;
 
-fn get_inner(inner: &Inner, pid: u32, ttl: Duration, children_index: &Arc<Mutex<HashMap<u32, Vec<u32>>>>) -> Option<ProcessInfo> {
+fn get_inner(
+    inner: &Inner,
+    pid: u32,
+    ttl: Duration,
+    children_index: &Arc<Mutex<HashMap<u32, Vec<u32>>>>,
+) -> Option<ProcessInfo> {
     let mut map = inner.lock().unwrap();
     let entry = map.get(&pid)?;
     if !ttl.is_zero() && entry.inserted_at.elapsed() >= ttl {

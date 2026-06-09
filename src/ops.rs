@@ -69,7 +69,9 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// Tries store first, then falls back to reading `/proc` directly.
 /// Returns `None` if the process doesn't exist.
 fn resolve_process_info(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
-    store.get_process(pid).or_else(|| crate::proc::parse_proc_entry(pid))
+    store
+        .get_process(pid)
+        .or_else(|| crate::proc::parse_proc_entry(pid))
 }
 
 /// Handle a batch of process lifecycle events.
@@ -391,13 +393,17 @@ pub fn siblings(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// assert_eq!(find_by_cmd(&store, "nginx"), Vec::<u32>::new());
 /// ```
 pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
-    find_by(store, |pid| {
-        store
-            .get_process(pid)
-            .map(|info| info.cmd)
-            .filter(|c| !c.is_empty())
-            .or_else(|| crate::proc::read_proc_comm(pid))
-    }, target_cmd)
+    find_by(
+        store,
+        |pid| {
+            store
+                .get_process(pid)
+                .map(|info| info.cmd)
+                .filter(|c| !c.is_empty())
+                .or_else(|| crate::proc::read_proc_comm(pid))
+        },
+        target_cmd,
+    )
 }
 
 /// Find all PIDs whose user matches the given string.
@@ -415,12 +421,16 @@ pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
 /// assert_eq!(find_by_user(&store, "nobody"), Vec::<u32>::new());
 /// ```
 pub fn find_by_user(store: &impl ProcessStore, target_user: &str) -> Vec<u32> {
-    find_by(store, |pid| {
-        store
-            .get_process(pid)
-            .map(|info| info.user)
-            .or_else(|| crate::proc::parse_proc_entry(pid).map(|info| info.user))
-    }, target_user)
+    find_by(
+        store,
+        |pid| {
+            store
+                .get_process(pid)
+                .map(|info| info.user)
+                .or_else(|| crate::proc::parse_proc_entry(pid).map(|info| info.user))
+        },
+        target_user,
+    )
 }
 
 /// Generic find function that filters PIDs by a value extractor.
