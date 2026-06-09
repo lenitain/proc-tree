@@ -68,16 +68,13 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 
 /// Handle a batch of process lifecycle events.
 ///
-/// Returns [`ProcessExitGuard`]s for exited processes. Each guard keeps the
-/// process info in the store until the guard is dropped.
+/// Returns [`ProcessExitGuard`]s for exited processes. The process info
+/// **stays in the store** — callers decide when to remove it via
+/// `store.remove_process(pid)`.
 ///
-/// # Why deferred removal?
-///
-/// When a process exits, its children are orphaned to init (PID 1), but the
-/// process info is kept in the store. This allows callers to access process
-/// info (cmd, user, chain) after the exit event but before removal. This is
-/// important for event-driven systems where file events (fanotify) may arrive
-/// after the proc connector exit event.
+/// This is critical for event-driven systems where file events (fanotify)
+/// may arrive after the proc connector exit event but still need to look
+/// up process info.
 ///
 /// # Example
 ///
@@ -92,20 +89,22 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// ]);
 /// assert!(guards.is_empty());
 ///
-/// // Exit returns guards (process info stays in store)
+/// // Exit returns guards — process info stays in store
 /// let guards = handle_events(&store, &[
 ///     ProcEvent::Exit { pid: 200 },
 /// ]);
 /// assert_eq!(guards.len(), 1);
-///
-/// // Process info is still accessible
 /// assert!(store.get_process(200).is_some());
 ///
-/// // When guards are dropped, process info is removed
+/// // Dropping guards does NOT remove processes
 /// drop(guards);
+/// assert!(store.get_process(200).is_some());
+///
+/// // Caller explicitly removes when done
+/// store.remove_process(200);
 /// assert!(store.get_process(200).is_none());
 /// ```
-#[must_use = "returned guards must be stored or they will remove processes immediately"]
+#[must_use = "returned guards track exits — use them to decide when to remove processes"]
 pub fn handle_events<S: ProcessStore + Clone>(
     store: &S,
     events: &[ProcEvent],
@@ -122,8 +121,7 @@ pub fn handle_events<S: ProcessStore + Clone>(
 /// Handle a single process lifecycle event.
 ///
 /// Returns `Some(ProcessExitGuard)` for Exit events, `None` for other events.
-/// Returns a [`ProcessExitGuard`] that keeps the process info in the store
-/// until the guard is dropped.
+/// The process info **stays in the store** — callers decide when to remove it.
 ///
 /// # Example
 ///
@@ -139,17 +137,19 @@ pub fn handle_events<S: ProcessStore + Clone>(
 ///     timestamp_ns: 0,
 /// });
 ///
-/// // Exit returns a guard (process info stays in store)
+/// // Exit returns a guard — process info stays in store
 /// let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
-///
-/// // Process info is still accessible
 /// assert!(store.get_process(100).is_some());
 ///
-/// // When guard is dropped, process info is removed
+/// // Dropping guard does NOT remove the process
 /// drop(guard);
+/// assert!(store.get_process(100).is_some());
+///
+/// // Caller explicitly removes when done
+/// store.remove_process(100);
 /// assert!(store.get_process(100).is_none());
 /// ```
-#[must_use = "returned guard must be stored or it will remove the process immediately"]
+#[must_use = "returned guard tracks exit — use it to decide when to remove the process"]
 pub fn handle_event<S: ProcessStore + Clone>(
     store: &S,
     event: &ProcEvent,

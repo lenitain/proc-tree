@@ -1,25 +1,17 @@
-//! Deferred process removal for exited processes.
+//! Process exit tracking via guards.
 //!
 //! When a process exits, `handle_event` returns a `ProcessExitGuard` that
-//! keeps the process info in the store until the guard is dropped. This
-//! allows callers to access process info (cmd, user, chain) after the exit
-//! event but before removal.
+//! records the exit. The process info **stays in the store** — it is not
+//! removed automatically. This is critical for event-driven systems where
+//! file events (fanotify) may arrive after the proc connector exit event.
 //!
-//! # Why deferred removal?
+//! # Design principle
 //!
-//! In event-driven systems, file events (fanotify) may arrive after the
-//! proc connector exit event. If process info is removed immediately on
-//! exit, these file events would lose access to process info.
+//! The caller decides when to remove process info. The guard is just a
+//! token that says "this process exited". Dropping the guard does nothing
+//! to the store.
 //!
-//! # How it works
-//!
-//! 1. When a process exits, `handle_event` returns a `ProcessExitGuard`
-//! 2. The guard keeps the process info in the store
-//! 3. When the guard is dropped (goes out of scope), the process info is
-//!    automatically removed from the store
-//! 4. Callers can also call `.remove()` for explicit removal
-//!
-//! # Example: Basic usage
+//! # Example
 //!
 //! ```rust
 //! use proc_tree::{DefaultStore, handle_event, ProcEvent, ProcessStore};
@@ -33,79 +25,55 @@
 //!     timestamp_ns: 0,
 //! });
 //!
-//! // Exit returns a guard (process info stays in store)
+//! // Exit returns a guard — process info stays in store
 //! let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
-//!
-//! // Process info is still accessible
 //! assert!(store.get_process(100).is_some());
-//! assert_eq!(store.get_process(100).unwrap().ppid, 1);
 //!
-//! // When guard is dropped, process info is removed
+//! // Dropping the guard does NOT remove the process
 //! drop(guard);
-//! assert!(store.get_process(100).is_none());
-//! ```
-//!
-//! # Example: Batch processing
-//!
-//! ```rust
-//! use proc_tree::{DefaultStore, handle_events, ProcEvent, ProcessStore};
-//!
-//! let store = DefaultStore::new(0);
-//!
-//! // Create processes
-//! handle_events(&store, &[
-//!     ProcEvent::Fork { child_pid: 100, parent_pid: 1, timestamp_ns: 0 },
-//!     ProcEvent::Fork { child_pid: 200, parent_pid: 1, timestamp_ns: 0 },
-//! ]);
-//!
-//! // Exit returns guards (process info stays in store)
-//! let guards = handle_events(&store, &[
-//!     ProcEvent::Exit { pid: 100 },
-//!     ProcEvent::Exit { pid: 200 },
-//! ]);
-//!
-//! // Process info is still accessible
 //! assert!(store.get_process(100).is_some());
-//! assert!(store.get_process(200).is_some());
 //!
-//! // When guards are dropped, process info is removed
-//! drop(guards);
-//! assert!(store.get_process(100).is_none());
-//! assert!(store.get_process(200).is_none());
-//! ```
-//!
-//! # Example: Explicit removal
-//!
-//! ```rust
-//! use proc_tree::{DefaultStore, handle_event, ProcEvent, ProcessStore};
-//!
-//! let store = DefaultStore::new(0);
-//!
-//! handle_event(&store, &ProcEvent::Fork {
-//!     child_pid: 100,
-//!     parent_pid: 1,
-//!     timestamp_ns: 0,
-//! });
-//!
-//! let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
-//!
-//! // Explicit removal (optional)
-//! guard.remove();
+//! // Caller explicitly removes when done
+//! store.remove_process(100);
 //! assert!(store.get_process(100).is_none());
 //! ```
 
 use crate::traits::ProcessStore;
 
-/// Guard that keeps exited process info in the store until dropped.
+/// Guard that marks an exited process.
 ///
-/// When dropped, automatically removes the process from the store.
-/// Use `.remove()` for explicit removal before the guard goes out of scope.
+/// The process info **stays in the store** until the caller explicitly
+/// calls `.remove()` or `.remove_if_stale()`. Dropping the guard does
+/// **not** remove the process — this ensures that events arriving after
+/// the exit event can still look up process info.
 ///
-/// See [module documentation](crate::guard) for detailed usage examples.
+/// # Example
+///
+/// ```rust
+/// use proc_tree::{DefaultStore, handle_event, ProcEvent, ProcessStore};
+///
+/// let store = DefaultStore::new(0);
+/// handle_event(&store, &ProcEvent::Fork {
+///     child_pid: 100,
+///     parent_pid: 1,
+///     timestamp_ns: 0,
+/// });
+///
+/// let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
+/// // Process info is still in the store
+/// assert!(store.get_process(100).is_some());
+///
+/// // Dropping the guard does NOT remove the process
+/// drop(guard);
+/// assert!(store.get_process(100).is_some());
+///
+/// // Explicit removal when you're done with the process
+/// store.remove_process(100);
+/// assert!(store.get_process(100).is_none());
+/// ```
 pub struct ProcessExitGuard<S: ProcessStore> {
     store: S,
     pid: u32,
-    removed: bool,
 }
 
 impl<S: ProcessStore> ProcessExitGuard<S> {
@@ -114,7 +82,6 @@ impl<S: ProcessStore> ProcessExitGuard<S> {
         Self {
             store,
             pid,
-            removed: false,
         }
     }
 
@@ -139,40 +106,9 @@ impl<S: ProcessStore> ProcessExitGuard<S> {
         self.pid
     }
 
-    /// Explicitly remove the process from the store.
-    ///
-    /// This is optional - the process will be removed automatically when the
-    /// guard is dropped. Call this if you want to remove the process earlier.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use proc_tree::{DefaultStore, handle_event, ProcEvent, ProcessStore};
-    ///
-    /// let store = DefaultStore::new(0);
-    /// handle_event(&store, &ProcEvent::Fork {
-    ///     child_pid: 100,
-    ///     parent_pid: 1,
-    ///     timestamp_ns: 0,
-    /// });
-    ///
-    /// let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
-    /// assert!(store.get_process(100).is_some());
-    ///
-    /// guard.remove();
-    /// assert!(store.get_process(100).is_none());
-    /// ```
-    pub fn remove(mut self) {
-        self.store.remove_process(self.pid);
-        self.removed = true;
-    }
-}
-
-impl<S: ProcessStore> Drop for ProcessExitGuard<S> {
-    fn drop(&mut self) {
-        if !self.removed {
-            self.store.remove_process(self.pid);
-        }
+    /// Get a reference to the store.
+    pub fn store(&self) -> &S {
+        &self.store
     }
 }
 
@@ -180,7 +116,6 @@ impl<S: ProcessStore> std::fmt::Debug for ProcessExitGuard<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ProcessExitGuard")
             .field("pid", &self.pid)
-            .field("removed", &self.removed)
             .finish()
     }
 }
@@ -192,7 +127,7 @@ mod tests {
     use crate::types::ProcessInfo;
 
     #[test]
-    fn guard_removes_on_drop() {
+    fn guard_does_not_remove_on_drop() {
         let store = DefaultStore::new(0);
         store.insert_process(
             100,
@@ -208,31 +143,11 @@ mod tests {
 
         {
             let _guard = ProcessExitGuard::new(store.clone(), 100);
-            assert!(store.get_process(100).is_some()); // Still accessible
+            assert!(store.get_process(100).is_some());
         } // _guard dropped here
 
-        assert!(store.get_process(100).is_none()); // Removed
-    }
-
-    #[test]
-    fn guard_explicit_remove() {
-        let store = DefaultStore::new(0);
-        store.insert_process(
-            100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "test".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
-        );
-
-        let guard = ProcessExitGuard::new(store.clone(), 100);
+        // Process info is still in the store after guard drop
         assert!(store.get_process(100).is_some());
-
-        guard.remove();
-        assert!(store.get_process(100).is_none());
     }
 
     #[test]

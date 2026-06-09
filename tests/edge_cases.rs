@@ -81,13 +81,16 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
-    // Process should be marked for removal (returned as guard)
+    // Process should be marked as exited (returned as guard)
     assert!(exited.is_some());
     assert_eq!(exited.as_ref().unwrap().pid(), pid);
-    // Process still in store until guard is dropped
+    // Process still in store
     assert_eq!(tree_len(&store), 1);
-    // Explicit removal
-    exited.unwrap().remove();
+    // Guard drop does NOT remove process
+    drop(exited);
+    assert_eq!(tree_len(&store), 1);
+    // Explicit removal by caller
+    store.remove_process(pid);
     assert_eq!(tree_len(&store), 0);
 }
 
@@ -195,10 +198,13 @@ fn handle_events_returns_multiple_exited_pids() {
     // Both still in store
     assert_eq!(tree_len(&store), 2);
 
-    // Remove both
-    for guard in exited {
-        guard.remove();
-    }
+    // Drop guards does NOT remove processes
+    drop(exited);
+    assert_eq!(tree_len(&store), 2);
+
+    // Caller explicitly removes when done
+    store.remove_process(100);
+    store.remove_process(200);
     assert_eq!(tree_len(&store), 0);
 }
 
