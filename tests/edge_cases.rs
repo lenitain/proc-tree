@@ -81,12 +81,13 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
-    // Exit returns PID
-    assert_eq!(exited, Some(pid));
+    // Exit returns ExitedProcess handle
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid, pid);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     // Explicit removal by caller
-    store.remove_process(pid);
+    exited.unwrap().remove(&store);
     assert_eq!(tree_len(&store), 0);
 }
 
@@ -107,15 +108,16 @@ fn exit_returns_pid() {
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
 
-    // Exit returns PID, process stays in store
+    // Exit returns ExitedProcess handle, process stays in store
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert_eq!(exited, Some(100));
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid, 100);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
 
     // Caller removes after processing
-    store.remove_process(100);
+    exited.unwrap().remove(&store);
     assert_eq!(tree_len(&store), 0);
     assert!(store.get_process(100).is_none());
 }
@@ -144,7 +146,8 @@ fn exit_orphans_children_before_removal() {
 
     // Exit parent - child should be orphaned to init
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert_eq!(exited, Some(100));
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid, 100);
 
     // Child's ppid should be 1 (init) before parent removal
     assert_eq!(store.get_process(200).unwrap().ppid, 1);
@@ -152,8 +155,8 @@ fn exit_orphans_children_before_removal() {
     // Parent still accessible
     assert!(store.get_process(100).is_some());
 
-    // Remove parent
-    store.remove_process(100);
+    // Remove parent via ExitedProcess::remove
+    exited.unwrap().remove(&store);
     assert!(store.get_process(100).is_none());
     // Child still accessible
     assert!(store.get_process(200).is_some());
@@ -186,15 +189,16 @@ fn handle_events_returns_multiple_exited_pids() {
         &[ProcEvent::Exit { pid: 100 }, ProcEvent::Exit { pid: 200 }],
     );
     assert_eq!(exited.len(), 2);
-    assert!(exited.contains(&100));
-    assert!(exited.contains(&200));
+    let mut exited_pids: Vec<u32> = exited.iter().map(|ep| ep.pid).collect();
+    exited_pids.sort();
+    assert_eq!(exited_pids, vec![100, 200]);
 
     // Both still in store
     assert_eq!(tree_len(&store), 2);
 
     // Caller explicitly removes when done
-    for pid in exited {
-        store.remove_process(pid);
+    for ep in exited {
+        ep.remove(&store);
     }
     assert_eq!(tree_len(&store), 0);
 }

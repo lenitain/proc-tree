@@ -3,7 +3,7 @@
 //! All functions are generic over [`ProcessStore`] so they work with any storage backend.
 
 use crate::traits::ProcessStore;
-use crate::tree::{ProcEvent, ProcessLink};
+use crate::tree::{ExitedProcess, ProcEvent, ProcessLink};
 use crate::types::ProcessInfo;
 
 /// Snapshot all running processes from `/proc`.
@@ -76,8 +76,8 @@ fn resolve_process_info(store: &impl ProcessStore, pid: u32) -> Option<ProcessIn
 
 /// Handle a batch of process lifecycle events.
 ///
-/// Returns PIDs of exited processes. The process info **stays in the store**
-/// — callers decide when to remove it via `store.remove_process(pid)`.
+/// Returns [`ExitedProcess`] handles for Exit events. The process info **stays in the store**
+/// — callers decide when to remove it via [`ExitedProcess::remove`].
 ///
 /// This is critical for event-driven systems where file events (fanotify)
 /// may arrive after the proc connector exit event but still need to look
@@ -96,24 +96,24 @@ fn resolve_process_info(store: &impl ProcessStore, pid: u32) -> Option<ProcessIn
 /// ]);
 /// assert!(exited.is_empty());
 ///
-/// // Exit returns PID — process info stays in store
+/// // Exit returns ExitedProcess handle — process info stays in store
 /// let exited = handle_events(&store, &[
 ///     ProcEvent::Exit { pid: 200 },
 /// ]);
-/// assert_eq!(exited, vec![200]);
+/// assert_eq!(exited[0].pid, 200);
 /// assert!(store.get_process(200).is_some());
 ///
 /// // Caller explicitly removes when done
-/// for pid in exited {
-///     store.remove_process(pid);
+/// for ep in exited {
+///     ep.remove(&store);
 /// }
 /// assert!(store.get_process(200).is_none());
 /// ```
-pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32> {
+pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<ExitedProcess> {
     let mut exited = Vec::new();
     for event in events {
-        if let Some(pid) = handle_event(store, event) {
-            exited.push(pid);
+        if let Some(ep) = handle_event(store, event) {
+            exited.push(ep);
         }
     }
     exited
@@ -121,8 +121,9 @@ pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32
 
 /// Handle a single process lifecycle event.
 ///
-/// Returns `Some(pid)` for Exit events, `None` for other events.
-/// The process info **stays in the store** — callers decide when to remove it.
+/// Returns [`ExitedProcess`] for Exit events, `None` for other events.
+/// The process info **stays in the store** — callers decide when to remove it
+/// via [`ExitedProcess::remove`].
 ///
 /// # Example
 ///
@@ -138,16 +139,16 @@ pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32
 ///     timestamp_ns: 0,
 /// });
 ///
-/// // Exit returns PID — process info stays in store
-/// let pid = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
-/// assert_eq!(pid, 100);
+/// // Exit returns ExitedProcess handle — process info stays in store
+/// let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
+/// assert_eq!(exited.pid, 100);
 /// assert!(store.get_process(100).is_some());
 ///
 /// // Caller explicitly removes when done
-/// store.remove_process(pid);
+/// exited.remove(&store);
 /// assert!(store.get_process(100).is_none());
 /// ```
-pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32> {
+pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<ExitedProcess> {
     match event {
         ProcEvent::Fork {
             child_pid,
@@ -188,7 +189,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32>
                     store.insert_process(child_pid, info);
                 }
             }
-            return Some(*pid);
+            return Some(ExitedProcess { pid: *pid });
         }
     }
     None

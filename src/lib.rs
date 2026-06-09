@@ -33,13 +33,13 @@
 //! let s = build_chain_string(&store, 1234);
 //! println!("Chain: {}", s);
 //!
-//! // Handle events (returns exited PIDs)
+//! // Handle events (returns ExitedProcess handles)
 //! let exited = handle_events(&store, &[
 //!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 //! ]);
 //! // Caller decides when to remove exited processes
-//! for pid in exited {
-//!     store.remove_process(pid);
+//! for ep in exited {
+//!     ep.remove(&store);
 //! }
 //! ```
 //!
@@ -66,7 +66,7 @@ pub use traits::ProcessStore;
 pub use default_store::DefaultStore;
 
 // Public API — tree types
-pub use tree::{ProcEvent, ProcessLink};
+pub use tree::{ExitedProcess, ProcEvent, ProcessLink};
 
 // Public API — operations
 pub use ops::{

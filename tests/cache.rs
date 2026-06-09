@@ -50,12 +50,13 @@ fn store_removes_on_exit() {
     let info_before = resolve(&store, 1).unwrap();
     // Exit event returns PID, process stays in store
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 1 });
-    assert_eq!(exited, Some(1));
+    assert!(exited.is_some());
+    assert_eq!(exited.as_ref().unwrap().pid, 1);
     // Process still in store
     let info_after = resolve(&store, 1).unwrap();
     assert_eq!(info_before.cmd, info_after.cmd);
     // Caller removes the process
-    store.remove_process(1);
+    exited.unwrap().remove(&store);
     // After removal, resolve should fall back to /proc
     let info_after = resolve(&store, 1);
     // If PID 1 still exists in /proc, it should be resolvable

@@ -55,11 +55,16 @@ let store = DefaultStore::new(600);
 snapshot(&store);
 
 // Events from proc-connector, audit, or any source
-handle_events(&store, &[
+let exited = handle_events(&store, &[
     ProcEvent::Fork { child_pid: 5000, parent_pid: 1234, timestamp_ns: 0 },
     ProcEvent::Exec { pid: 5000, timestamp_ns: 1 },
     ProcEvent::Exit { pid: 5000 },  // Children orphaned to init
 ]);
+
+// Caller explicitly removes when done processing related events
+for ep in exited {
+    ep.remove(&store);
+}
 ```
 
 ---
@@ -135,7 +140,7 @@ pub enum ProcEvent {
 |---------|----------|
 | `Fork` | Inserts a new process (`child_pid → parent_pid`), cmd left empty |
 | `Exec` | Reads `/proc/{pid}/status` to update cmd, user, ppid, tgid |
-| `Exit` | Removes process, orphans children to init (PID 1) |
+| `Exit` | Returns `ExitedProcess` handle, orphans children to init (PID 1) |
 
 ### `ProcessLink`
 
@@ -148,6 +153,23 @@ pub struct ProcessLink {
 ```
 
 Displayed as `"pid|cmd|user"`. A chain is a `Vec<ProcessLink>` ordered from child to ancestor.
+
+### `ExitedProcess`
+
+```rust
+pub struct ExitedProcess {
+    pub pid: u32,
+}
+```
+
+Returned by `handle_event` / `handle_events` for Exit events. The process info **stays in the store** until `remove()` is called, allowing late-arriving events to still look up process info.
+
+```rust
+let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
+assert!(store.get_process(100).is_some());  // still accessible
+exited.remove(&store);                       // explicitly remove when done
+assert!(store.get_process(100).is_none());
+```
 
 ---
 

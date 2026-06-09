@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::traits::ProcessStore;
+
 // ---- Process events (decoupled from proc-connector) ----
 
 /// A process lifecycle event. Decoupled from any specific event source
@@ -18,6 +20,49 @@ pub enum ProcEvent {
     Exec { pid: u32, timestamp_ns: u64 },
     /// A process exited. The node is preserved for historical chain lookups.
     Exit { pid: u32 },
+}
+
+// ---- ExitedProcess (explicit removal handle) ----
+
+/// An exited process awaiting explicit removal from the store.
+///
+/// Returned by [`handle_event`](crate::handle_event) and [`handle_events`](crate::handle_events)
+/// for Exit events. The process info **stays in the store** until
+/// [`remove`](ExitedProcess::remove) is called, allowing late-arriving events
+/// to still look up process info.
+///
+/// # Example
+///
+/// ```
+/// use proc_tree::{DefaultStore, handle_event, ProcEvent, ExitedProcess, ProcessStore};
+///
+/// let store = DefaultStore::new(0);
+/// handle_event(&store, &ProcEvent::Fork { child_pid: 100, parent_pid: 1, timestamp_ns: 0 });
+///
+/// let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
+/// assert_eq!(exited.pid, 100);
+///
+/// // Process still in store — caller can still query it
+/// assert!(store.get_process(100).is_some());
+///
+/// // Explicitly remove when done
+/// exited.remove(&store);
+/// assert!(store.get_process(100).is_none());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExitedProcess {
+    /// The PID of the exited process.
+    pub pid: u32,
+}
+
+impl ExitedProcess {
+    /// Remove this process from the store.
+    ///
+    /// Call this after all related events have been processed.
+    /// The process info is no longer accessible after this call.
+    pub fn remove<S: ProcessStore>(self, store: &S) {
+        store.remove_process(self.pid);
+    }
 }
 
 // ---- ProcessLink (structured chain element) ----
