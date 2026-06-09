@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-09
+
+### Changed
+
+- **Unified storage interface**: merged `TreeStore` and `CacheStore` into single `ProcessStore` trait
+- **Unified data type**: merged `PidNode` and `ProcInfo` into single `ProcessInfo` struct
+- **Unified store**: `DefaultStore` replaces `DefaultTree` and `DefaultCache`
+- **Correct process tree semantics**: Exit event now removes process and orphans children to init (PID 1)
+- **O(1) child lookups**: added `children_index` for efficient child process queries
+- **Removed capacity parameter**: `DefaultStore::new(ttl_secs)` instead of `DefaultStore::new(capacity, ttl_secs)`
+- **Private proc module**: internal `/proc` reading functions no longer exposed in public API
+- **Improved documentation**: added internal usage notes for proc module functions
+
+### Added
+
+- `ProcessStore` trait with `remove_process()` and `children_of()` methods
+- `ProcessInfo` struct combining tree node and process info
+- `children_index` in `DefaultStore` for O(1) child lookups
+- Cycle detection in `is_descendant()` and `build_chain_links()`
+
+### Removed
+
+- `TreeStore` trait (merged into `ProcessStore`)
+- `CacheStore` trait (merged into `ProcessStore`)
+- `PidNode` struct (merged into `ProcessInfo`)
+- `ProcInfo` struct (merged into `ProcessInfo`)
+- `DefaultTree` type alias (replaced by `DefaultStore`)
+- `DefaultCache` type alias (replaced by `DefaultStore`)
+- Capacity parameter from `DefaultStore::new()`
+
+### Fixed
+
+- **Semantic correctness**: process tree now only contains living processes
+- **Clippy warnings**: replaced `or_insert_with(Vec::new)` with `or_default()`
+
 ## [0.1.1] - 2026-06-06
 
 ### Changed
