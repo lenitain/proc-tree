@@ -50,7 +50,7 @@ fn store_removes_on_exit() {
     let info_before = resolve(&store, 1).unwrap();
     // Exit event marks for removal but doesn't remove
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 1 });
-    assert_eq!(exited, Some(1));
+    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), 1);
     // Process still in store
     let info_after = resolve(&store, 1).unwrap();
     assert_eq!(info_before.cmd, info_after.cmd);

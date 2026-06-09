@@ -10,6 +10,7 @@
 //! use proc_tree::{snapshot, resolve, handle_events, build_chain_string};
 //!
 //! // Implement your own storage (or use a provided example)
+//! # #[derive(Clone)]
 //! # struct MyStore;
 //! # impl ProcessStore for MyStore {
 //! #     fn get_process(&self, pid: u32) -> Option<ProcessInfo> { None }
@@ -33,14 +34,12 @@
 //! let s = build_chain_string(&store, 1234);
 //! println!("Chain: {}", s);
 //!
-//! // Handle events (returns exited PIDs for caller to remove)
-//! let exited = handle_events(&store, &[
+//! // Handle events (returns RAII guards for exited processes)
+//! let guards = handle_events(&store, &[
 //!     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 //! ]);
-//! // Remove exited processes when ready
-//! for pid in exited {
-//!     store.remove_process(pid);
-//! }
+//! // Guards automatically remove processes when dropped
+//! // Or call guard.remove() for explicit removal
 //! ```
 //!
 //! ## PID Reuse Detection
@@ -50,6 +49,7 @@
 //! with the current `/proc` value to detect reuse.
 
 mod default_store;
+mod guard;
 mod ops;
 mod proc;
 mod traits;
@@ -57,6 +57,7 @@ mod tree;
 mod types;
 
 // Public API — types
+pub use guard::ExitedProcessGuard;
 pub use types::ProcessInfo;
 
 // Public API — traits

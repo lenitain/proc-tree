@@ -81,12 +81,12 @@ fn handle_fork_then_exec_then_exit() {
         },
     );
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
-    // Process should be marked for removal (returned as exited pid)
-    assert_eq!(exited, Some(pid));
-    // Process still in store until caller removes it
+    // Process should be marked for removal (returned as guard)
+    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), pid);
+    // Process still in store until guard is dropped
     assert_eq!(tree_len(&store), 1);
-    // Caller removes the process
-    store.remove_process(pid);
+    // Explicit removal
+    exited.unwrap().remove();
     assert_eq!(tree_len(&store), 0);
 }
 
@@ -109,7 +109,7 @@ fn exit_deferred_removal() {
 
     // Exit marks for removal but doesn't remove
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert_eq!(exited, Some(100));
+    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), 100);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
@@ -144,7 +144,7 @@ fn exit_orphans_children_before_removal() {
 
     // Exit parent - child should be orphaned to init
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
-    assert_eq!(exited, Some(100));
+    assert!(exited.is_some()); assert_eq!(exited.as_ref().unwrap().pid(), 100);
 
     // Child's ppid should be 1 (init) before parent removal
     assert_eq!(store.get_process(200).unwrap().ppid, 1);
@@ -189,15 +189,15 @@ fn handle_events_returns_multiple_exited_pids() {
         ],
     );
     assert_eq!(exited.len(), 2);
-    assert!(exited.contains(&100));
-    assert!(exited.contains(&200));
+    assert!(exited.iter().any(|g| g.pid() == 100));
+    assert!(exited.iter().any(|g| g.pid() == 200));
 
     // Both still in store
     assert_eq!(tree_len(&store), 2);
 
     // Remove both
-    for pid in exited {
-        store.remove_process(pid);
+    for guard in exited {
+        guard.remove();
     }
     assert_eq!(tree_len(&store), 0);
 }

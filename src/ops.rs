@@ -2,6 +2,7 @@
 //!
 //! All functions are generic over [`ProcessStore`] so they work with any storage backend.
 
+use crate::guard::ExitedProcessGuard;
 use crate::traits::ProcessStore;
 use crate::tree::{ProcEvent, ProcessLink};
 use crate::types::ProcessInfo;
@@ -67,10 +68,8 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 
 /// Handle a batch of process lifecycle events.
 ///
-/// Returns a list of PIDs from Exit events. These processes have been
-/// marked for removal (children orphaned to init) but not yet removed.
-/// The caller **must** call `store.remove_process(pid)` after processing
-/// the events to complete the removal. Failing to do so will leak memory.
+/// Returns RAII guards for exited processes. Each guard automatically removes
+/// the process from the store when dropped. Use `.remove()` for explicit removal.
 ///
 /// # Why deferred removal?
 ///
@@ -88,48 +87,68 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// let store = DefaultStore::new(0);
 ///
 /// // Fork creates a process
-/// let exited = handle_events(&store, &[
+/// let guards = handle_events(&store, &[
 ///     ProcEvent::Fork { child_pid: 200, parent_pid: 100, timestamp_ns: 0 },
 /// ]);
-/// assert!(exited.is_empty());
+/// assert!(guards.is_empty());
 ///
-/// // Exit marks for removal
-/// let exited = handle_events(&store, &[
+/// // Exit returns guards
+/// let guards = handle_events(&store, &[
 ///     ProcEvent::Exit { pid: 200 },
 /// ]);
-/// assert_eq!(exited, vec![200]);
+/// assert_eq!(guards.len(), 1);
 ///
-/// // Process still accessible until removed
+/// // Process still accessible until guard is dropped
 /// assert!(store.get_process(200).is_some());
 ///
-/// // Caller must remove after processing
-/// for pid in exited {
-///     store.remove_process(pid);
+/// // Explicit removal (optional)
+/// for guard in guards {
+///     guard.remove();
 /// }
 /// assert!(store.get_process(200).is_none());
 /// ```
-#[must_use = "returned PIDs must be removed by calling store.remove_process(pid)"]
-pub fn handle_events(store: &impl ProcessStore, events: &[ProcEvent]) -> Vec<u32> {
-    let mut exited = Vec::new();
+#[must_use = "returned guards must be stored or they will remove processes immediately"]
+pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -> Vec<ExitedProcessGuard<S>> {
+    let mut guards = Vec::new();
     for event in events {
-        if let Some(pid) = handle_event(store, event) {
-            exited.push(pid);
+        if let Some(guard) = handle_event(store, event) {
+            guards.push(guard);
         }
     }
-    exited
+    guards
 }
 
 /// Handle a single process lifecycle event.
 ///
-/// Returns `Some(pid)` for Exit events (process marked for removal but not removed),
-/// `None` for other events.
+/// Returns `Some(ExitedProcessGuard)` for Exit events, `None` for other events.
+/// The guard automatically removes the process when dropped.
 ///
-/// # Important
+/// # Example
 ///
-/// For Exit events, the returned PID **must** be removed by calling
-/// `store.remove_process(pid)` after processing. See [`handle_events`] for details.
-#[must_use = "returned PID must be removed by calling store.remove_process(pid)"]
-pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32> {
+/// ```
+/// use proc_tree::{DefaultStore, handle_event, ProcEvent, ProcessStore};
+///
+/// let store = DefaultStore::new(0);
+///
+/// // Create a process
+/// handle_event(&store, &ProcEvent::Fork {
+///     child_pid: 100,
+///     parent_pid: 1,
+///     timestamp_ns: 0,
+/// });
+///
+/// // Exit returns a guard
+/// let guard = handle_event(&store, &ProcEvent::Exit { pid: 100 }).unwrap();
+///
+/// // Process still accessible
+/// assert!(store.get_process(100).is_some());
+///
+/// // Guard removes process when dropped
+/// drop(guard);
+/// assert!(store.get_process(100).is_none());
+/// ```
+#[must_use = "returned guard must be stored or it will remove the process immediately"]
+pub fn handle_event<S: ProcessStore + Clone>(store: &S, event: &ProcEvent) -> Option<ExitedProcessGuard<S>> {
     match event {
         ProcEvent::Fork {
             child_pid,
@@ -170,8 +189,8 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<u32>
                     store.insert_process(child_pid, info);
                 }
             }
-            // Return pid for caller to remove after processing
-            return Some(*pid);
+            // Return guard for automatic cleanup
+            return Some(ExitedProcessGuard::new(store.clone(), *pid));
         }
     }
     None
