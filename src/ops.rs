@@ -100,10 +100,7 @@ pub fn resolve(store: &impl ProcessStore, pid: u32) -> Option<ProcessInfo> {
 /// }
 /// assert!(store.get_process(200).is_none());
 /// ```
-pub fn handle_events<S: ProcessStore + Clone>(
-    store: &S,
-    events: &[ProcEvent],
-) -> Vec<u32> {
+pub fn handle_events<S: ProcessStore + Clone>(store: &S, events: &[ProcEvent]) -> Vec<u32> {
     let mut exited = Vec::new();
     for event in events {
         if let Some(pid) = handle_event(store, event) {
@@ -141,10 +138,7 @@ pub fn handle_events<S: ProcessStore + Clone>(
 /// store.remove_process(pid);
 /// assert!(store.get_process(100).is_none());
 /// ```
-pub fn handle_event<S: ProcessStore + Clone>(
-    store: &S,
-    event: &ProcEvent,
-) -> Option<u32> {
+pub fn handle_event<S: ProcessStore + Clone>(store: &S, event: &ProcEvent) -> Option<u32> {
     match event {
         ProcEvent::Fork {
             child_pid,
