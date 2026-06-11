@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-06-11
+
+### Fixed
+
+- **Process name truncation**: `parse_proc_entry()` now reads full command from `/proc/PID/cmdline` instead of the truncated `Name:` field (15 char limit on Linux), fixing `is_descendant()` failures for long command names like `bun /home/user/.bun/bin/pi`
+  - Falls back to `Name:` for kernel threads where `cmdline` is empty
+  - Added `read_proc_cmdline(pid)` helper function
+  - Added 4 unit tests for the new function
+
 ## [0.2.0] - 2026-06-09
 
 ### Added
