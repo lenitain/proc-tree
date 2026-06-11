@@ -249,7 +249,11 @@ mod tests {
         let s = cmdline.unwrap();
         assert!(!s.is_empty());
         // PID 1 is typically "init" or "systemd" — should not contain NUL bytes
-        assert!(!s.contains('\0'), "cmdline should not contain NUL bytes: {:?}", s);
+        assert!(
+            !s.contains('\0'),
+            "cmdline should not contain NUL bytes: {:?}",
+            s
+        );
     }
 
     #[test]
@@ -262,7 +266,10 @@ mod tests {
         // PID 2 (kthreadd) has empty cmdline on Linux
         let cmdline = read_proc_cmdline(2);
         // Should be None for kernel threads
-        assert!(cmdline.is_none(), "kernel thread PID 2 should have empty cmdline");
+        assert!(
+            cmdline.is_none(),
+            "kernel thread PID 2 should have empty cmdline"
+        );
     }
 
     #[test]

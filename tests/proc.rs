@@ -19,11 +19,14 @@ fn resolve_pid1_is_init() {
     let store = TestStore::default();
     snapshot(&store);
     let info = resolve(&store, 1).unwrap();
-    // PID 1 is typically "systemd" or "init"
+    // cmd is the full cmdline; extract basename for comparison
+    let base = info.cmd.split_whitespace().next().unwrap_or("");
+    let base = base.rsplit('/').next().unwrap_or(base);
     assert!(
-        info.cmd == "systemd" || info.cmd == "init" || info.cmd == "runit",
-        "PID 1 cmd should be init-like, got: {}",
-        info.cmd
+        base == "systemd" || base == "init" || base == "runit",
+        "PID 1 cmd should be init-like, got: {} (base: {})",
+        info.cmd,
+        base
     );
 }
 
