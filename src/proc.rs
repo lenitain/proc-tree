@@ -119,7 +119,28 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
     })
 }
 
-/// Parse `/proc/{pid}/status` into a `ProcessInfo`.
+/// Read the full command line for a PID from `/proc/{pid}/cmdline`.
+///
+/// Returns `None` if the process doesn't exist or the file can't be read.
+/// The null-byte separators between arguments are replaced with spaces.
+/// Kernel threads (which have empty cmdline) return `None`.
+pub fn read_proc_cmdline(pid: u32) -> Option<String> {
+    let path = proc_path(pid, "cmdline");
+    let bytes = std::fs::read(path.as_str()).ok()?;
+    if bytes.is_empty() {
+        return None;
+    }
+    // cmdline uses NUL bytes between arguments; trim trailing NUL and join with spaces.
+    let s = String::from_utf8_lossy(&bytes);
+    let trimmed = s.trim_end_matches('\0');
+    Some(trimmed.replace('\0', " "))
+}
+
+/// Parse `/proc/{pid}/status` and `/proc/{pid}/cmdline` into a `ProcessInfo`.
+///
+/// The `cmd` field is populated from `/proc/{pid}/cmdline` (full command line
+/// with arguments), falling back to the `Name:` field from `/proc/{pid}/status`
+/// (truncated to 15 chars) for kernel threads where cmdline is empty.
 ///
 /// Returns `None` if the process doesn't exist or the status file can't be read.
 ///
@@ -135,14 +156,14 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
     let path = proc_path(pid, "status");
     let status = std::fs::read_to_string(path.as_str()).ok()?;
     let mut ppid = 0u32;
-    let mut cmd = String::new();
+    let mut name = String::new();
     let mut user = String::new();
     let mut tgid = 0u32;
     for line in status.lines() {
         if let Some(val) = line.strip_prefix("PPid:") {
             ppid = val.trim().parse().unwrap_or(0);
         } else if let Some(val) = line.strip_prefix("Name:") {
-            cmd = val.trim().to_string();
+            name = val.trim().to_string();
         } else if let Some(val) = line.strip_prefix("Uid:") {
             if let Some(uid_str) = val.split_whitespace().next()
                 && let Ok(uid) = uid_str.parse::<u32>()
@@ -155,6 +176,9 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
             tgid = val.trim().parse().unwrap_or(0);
         }
     }
+    // Use full cmdline (e.g. "bun /home/user/.bun/bin/pi") when available,
+    // fall back to short Name: field (e.g. "bun") for kernel threads.
+    let cmd = read_proc_cmdline(pid).unwrap_or(name);
     let start_time_ns = read_proc_start_time_ns(pid);
     Some(crate::types::ProcessInfo {
         cmd,
@@ -216,5 +240,41 @@ mod tests {
     fn test_uid_to_username_nonexistent() {
         // UID 0xFFFFFFFF almost certainly doesn't exist
         assert!(uid_to_username(0xFFFFFFFF).is_none());
+    }
+
+    #[test]
+    fn test_read_proc_cmdline_pid1() {
+        let cmdline = read_proc_cmdline(1);
+        assert!(cmdline.is_some(), "PID 1 should have a cmdline");
+        let s = cmdline.unwrap();
+        assert!(!s.is_empty());
+        // PID 1 is typically "init" or "systemd" — should not contain NUL bytes
+        assert!(!s.contains('\0'), "cmdline should not contain NUL bytes: {:?}", s);
+    }
+
+    #[test]
+    fn test_read_proc_cmdline_nonexistent() {
+        assert!(read_proc_cmdline(0x7FFFFFFF).is_none());
+    }
+
+    #[test]
+    fn test_read_proc_cmdline_kernel_thread() {
+        // PID 2 (kthreadd) has empty cmdline on Linux
+        let cmdline = read_proc_cmdline(2);
+        // Should be None for kernel threads
+        assert!(cmdline.is_none(), "kernel thread PID 2 should have empty cmdline");
+    }
+
+    #[test]
+    fn test_parse_proc_entry_uses_full_cmdline() {
+        // PID 1 should have a full cmdline (e.g. "/sbin/init" or "/usr/lib/systemd/systemd")
+        let info = parse_proc_entry(1).expect("PID 1 should exist");
+        // The cmd should NOT be just "init" or "systemd" (the Name: field),
+        // but the full path from cmdline
+        assert!(
+            info.cmd.len() > 15 || !info.cmd.contains(' '),
+            "PID 1 cmd should be full cmdline, got: {:?}",
+            info.cmd
+        );
     }
 }
