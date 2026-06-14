@@ -183,11 +183,14 @@ pub trait ProcessStore {
     fn insert_process(&self, pid: u32, info: ProcessInfo);
     fn remove_process(&self, pid: u32) -> Option<ProcessInfo>;
     fn all_pids(&self) -> Vec<u32>;
-    fn children_of(&self, pid: u32) -> Vec<u32>;
+    fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32));
+    fn children_of(&self, pid: u32) -> Vec<u32>; // default impl via for_each_child
 }
 ```
 
 All functions in `ops` are generic over this trait — bring your own storage.
+
+> **Performance note**: `for_each_child` is the core method — it iterates children without allocating a return `Vec`. The `children_of` convenience method has a default implementation that collects into a `Vec`. Hot paths (e.g., `handle_event` Exit handler) use `for_each_child` directly for zero-allocation iteration.
 
 ---
 

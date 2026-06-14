@@ -11,6 +11,8 @@ use std::sync::OnceLock;
 
 use arrayvec::ArrayString;
 
+const UNKNOWN: &str = "unknown";
+
 /// Clock ticks per second (POSIX `sysconf(_SC_CLK_TCK)`).
 ///
 /// Returns 100 as fallback — the overwhelmingly common value on Linux.
@@ -106,7 +108,7 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
             for entry in passwd.lines() {
                 let mut parts = entry.splitn(4, ':');
                 let name = parts.next();
-                let _shell = parts.next(); // password field
+                let _password = parts.next();
                 let uid_str = parts.next();
                 if let (Some(name), Some(uid_str)) = (name, uid_str)
                     && let Ok(uid) = uid_str.parse::<u32>()
@@ -168,9 +170,9 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
             if let Some(uid_str) = val.split_whitespace().next()
                 && let Ok(uid) = uid_str.parse::<u32>()
             {
-                user = uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
+                user = uid_to_username(uid).unwrap_or(UNKNOWN).to_owned();
             } else {
-                user = "unknown".to_string();
+                user = UNKNOWN.to_string();
             }
         } else if let Some(val) = line.strip_prefix("Tgid:") {
             tgid = val.trim().parse().unwrap_or(0);
@@ -198,8 +200,8 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
 ///
 /// This function is used internally by [`parse_proc_entry`] to populate
 /// the `user` field of [`super::types::ProcessInfo`].
-pub fn uid_to_username(uid: u32) -> Option<String> {
-    uid_passwd_map().get(&uid).cloned()
+pub fn uid_to_username(uid: u32) -> Option<&'static str> {
+    uid_passwd_map().get(&uid).map(|s| s.as_str())
 }
 
 #[cfg(test)]
@@ -233,7 +235,7 @@ mod tests {
     fn test_uid_to_username_root() {
         // root (UID 0) should always exist on Linux
         let name = uid_to_username(0);
-        assert_eq!(name.as_deref(), Some("root"));
+        assert_eq!(name, Some("root"));
     }
 
     #[test]

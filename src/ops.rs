@@ -2,9 +2,13 @@
 //!
 //! All functions are generic over [`ProcessStore`] so they work with any storage backend.
 
+use std::fmt::Write;
+
 use crate::traits::ProcessStore;
 use crate::tree::{ExitedProcess, ProcEvent, ProcessLink};
 use crate::types::ProcessInfo;
+
+const UNKNOWN: &str = "unknown";
 
 /// Snapshot all running processes from `/proc`.
 ///
@@ -169,28 +173,24 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
             );
         }
         ProcEvent::Exec { pid, .. } => {
-            let info = crate::proc::parse_proc_entry(*pid).unwrap_or_else(|| {
-                let cmd = "unknown".to_string();
-                ProcessInfo {
-                    ppid: 0,
-                    cmd,
-                    user: "unknown".to_string(),
-                    tgid: 0,
-                    start_time_ns: 0,
-                }
+            let info = crate::proc::parse_proc_entry(*pid).unwrap_or_else(|| ProcessInfo {
+                ppid: 0,
+                cmd: UNKNOWN.to_string(),
+                user: UNKNOWN.to_string(),
+                tgid: 0,
+                start_time_ns: 0,
             });
             // Keep start_time_ns from /proc, don't overwrite with event timestamp
             store.insert_process(*pid, info);
         }
         ProcEvent::Exit { pid } => {
             // Orphan children to init (PID 1)
-            let children = store.children_of(*pid);
-            for child_pid in children {
+            store.for_each_child(*pid, &mut |child_pid| {
                 if let Some(mut info) = store.get_process(child_pid) {
                     info.ppid = 1;
                     store.insert_process(child_pid, info);
                 }
-            }
+            });
             return Some(ExitedProcess { pid: *pid });
         }
     }
@@ -265,8 +265,8 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
             None => {
                 parts.push(ProcessLink {
                     pid: current,
-                    cmd: "unknown".to_string(),
-                    user: "unknown".to_string(),
+                    cmd: UNKNOWN.to_string(),
+                    user: UNKNOWN.to_string(),
                 });
                 break;
             }
@@ -292,11 +292,19 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
 /// assert_eq!(chain, "200|bash|root;100|sshd|root;1|init|root");
 /// ```
 pub fn build_chain_string(store: &impl ProcessStore, pid: u32) -> String {
-    build_chain_links(store, pid)
-        .iter()
-        .map(|l| l.to_string())
-        .collect::<Vec<_>>()
-        .join(";")
+    let links = build_chain_links(store, pid);
+    if links.is_empty() {
+        return String::new();
+    }
+    let mut result = String::new();
+    for (i, link) in links.iter().enumerate() {
+        if i > 0 {
+            result.push(';');
+        }
+        // SAFETY: writing to String never fails
+        let _ = write!(result, "{link}");
+    }
+    result
 }
 
 /// Get direct children of a PID.
@@ -486,18 +494,21 @@ fn render_tree(store: &impl ProcessStore, pid: u32, is_root: bool) -> String {
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
         let sub = render_tree(store, kid, false);
-        let lines: Vec<&str> = sub.lines().collect();
-        if is_root && i == 0 {
-            output.push_str(&format!("─{}", lines[0]));
-        } else {
-            output.push('\n');
-            output.push_str(prefix);
-            output.push_str(lines[0]);
-        }
-        for line in &lines[1..] {
-            output.push('\n');
-            output.push_str(continuation);
-            output.push_str(line);
+        let mut lines = sub.lines();
+        if let Some(first) = lines.next() {
+            if is_root && i == 0 {
+                output.push('─');
+                output.push_str(first);
+            } else {
+                output.push('\n');
+                output.push_str(prefix);
+                output.push_str(first);
+            }
+            for line in lines {
+                output.push('\n');
+                output.push_str(continuation);
+                output.push_str(line);
+            }
         }
     }
     output
@@ -508,7 +519,7 @@ fn get_cmd(store: &impl ProcessStore, pid: u32) -> String {
     resolve_process_info(store, pid)
         .map(|info| info.cmd)
         .filter(|c| !c.is_empty())
-        .unwrap_or_else(|| "unknown".to_string())
+        .unwrap_or_else(|| UNKNOWN.to_string())
 }
 
 /// Get the number of entries in the store.

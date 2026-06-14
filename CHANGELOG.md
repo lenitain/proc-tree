@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-06-14
+
+### Changed
+
+- **Zero-allocation child iteration**: added `for_each_child(&self, pid, f)` to `ProcessStore` trait — iterates children via callback without allocating a return `Vec`
+- **`children_of` is now a default method**: convenience wrapper around `for_each_child`, backward compatible
+- **`uid_to_username` returns `&'static str`**: no longer clones from the static `/etc/passwd` cache on every call
+- **`handle_event` Exit handler**: uses `for_each_child` directly for zero-allocation child orphaning
+- **`build_chain_string`**: eliminated intermediate `Vec<String>` allocation, writes directly via `fmt::Write`
+- **`render_tree`**: eliminated `Vec<&str>` allocation for line iteration, replaced `format!()` with `push`/`push_str`
+- **`UNKNOWN` constant**: shared across `ops.rs` and `proc.rs` to avoid repeated `"unknown".to_string()` heap allocations
+
+### Fixed
+
+- **Variable naming**: `_shell` renamed to `_password` (was actually the password field in `/etc/passwd`, not the shell field)
+
 ## [0.2.1] - 2026-06-11
 
 ### Fixed
