@@ -497,7 +497,8 @@ fn render_tree(store: &impl ProcessStore, pid: u32, is_root: bool) -> String {
         let sub = render_tree(store, kid, false);
         let lines: Vec<&str> = sub.lines().collect();
         if is_root && i == 0 {
-            output.push_str(&format!("─{}", lines[0]));
+            output.push('─');
+            output.push_str(lines[0]);
         } else {
             output.push('\n');
             output.push_str(prefix);
