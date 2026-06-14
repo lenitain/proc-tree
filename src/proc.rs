@@ -11,6 +11,8 @@ use std::sync::OnceLock;
 
 use arrayvec::ArrayString;
 
+const UNKNOWN: &str = "unknown";
+
 /// Clock ticks per second (POSIX `sysconf(_SC_CLK_TCK)`).
 ///
 /// Returns 100 as fallback — the overwhelmingly common value on Linux.
@@ -168,9 +170,9 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
             if let Some(uid_str) = val.split_whitespace().next()
                 && let Ok(uid) = uid_str.parse::<u32>()
             {
-                user = uid_to_username(uid).unwrap_or_else(|| "unknown".to_string());
+                user = uid_to_username(uid).unwrap_or_else(|| UNKNOWN.to_string());
             } else {
-                user = "unknown".to_string();
+                user = UNKNOWN.to_string();
             }
         } else if let Some(val) = line.strip_prefix("Tgid:") {
             tgid = val.trim().parse().unwrap_or(0);
