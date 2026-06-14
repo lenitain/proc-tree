@@ -494,19 +494,21 @@ fn render_tree(store: &impl ProcessStore, pid: u32, is_root: bool) -> String {
         let prefix = if is_last { "└─" } else { "├─" };
         let continuation = if is_last { "  " } else { "│ " };
         let sub = render_tree(store, kid, false);
-        let lines: Vec<&str> = sub.lines().collect();
-        if is_root && i == 0 {
-            output.push('─');
-            output.push_str(lines[0]);
-        } else {
-            output.push('\n');
-            output.push_str(prefix);
-            output.push_str(lines[0]);
-        }
-        for line in &lines[1..] {
-            output.push('\n');
-            output.push_str(continuation);
-            output.push_str(line);
+        let mut lines = sub.lines();
+        if let Some(first) = lines.next() {
+            if is_root && i == 0 {
+                output.push('─');
+                output.push_str(first);
+            } else {
+                output.push('\n');
+                output.push_str(prefix);
+                output.push_str(first);
+            }
+            for line in lines {
+                output.push('\n');
+                output.push_str(continuation);
+                output.push_str(line);
+            }
         }
     }
     output
