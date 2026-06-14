@@ -106,7 +106,7 @@ fn uid_passwd_map() -> &'static HashMap<u32, String> {
             for entry in passwd.lines() {
                 let mut parts = entry.splitn(4, ':');
                 let name = parts.next();
-                let _shell = parts.next(); // password field
+                let _password = parts.next();
                 let uid_str = parts.next();
                 if let (Some(name), Some(uid_str)) = (name, uid_str)
                     && let Ok(uid) = uid_str.parse::<u32>()
