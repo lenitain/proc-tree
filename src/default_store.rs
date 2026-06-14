@@ -44,12 +44,12 @@ fn get_inner(
     ttl: Duration,
     children_index: &Arc<Mutex<HashMap<u32, Vec<u32>>>>,
 ) -> Option<ProcessInfo> {
-    let mut map = inner.lock().unwrap();
+    let mut map = inner.lock().expect("lock poisoned");
     let entry = map.get(&pid)?;
     if !ttl.is_zero() && entry.inserted_at.elapsed() >= ttl {
-        let info = map.remove(&pid).unwrap().value;
+        let info = map.remove(&pid).expect("entry should exist").value;
         // Update children index
-        let mut index = children_index.lock().unwrap();
+        let mut index = children_index.lock().expect("lock poisoned");
         if let Some(children) = index.get_mut(&info.ppid) {
             children.retain(|&c| c != pid);
         }
@@ -61,7 +61,7 @@ fn get_inner(
 }
 
 fn insert_inner(inner: &Inner, pid: u32, value: ProcessInfo) {
-    let mut map = inner.lock().unwrap();
+    let mut map = inner.lock().expect("lock poisoned");
     map.insert(
         pid,
         Entry {
@@ -95,7 +95,7 @@ impl DefaultStore {
 
     /// Number of entries (including possibly-expired ones not yet evicted).
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap().len()
+        self.inner.lock().expect("lock poisoned").len()
     }
 
     /// Returns `true` if the store contains no entries.
@@ -108,7 +108,7 @@ impl DefaultStore {
     /// Does not trigger TTL eviction — use [`get_process`](ProcessStore::get_process)
     /// to check existence with TTL enforcement.
     pub fn contains_key(&self, pid: u32) -> bool {
-        self.inner.lock().unwrap().contains_key(&pid)
+        self.inner.lock().expect("lock poisoned").contains_key(&pid)
     }
 }
 
@@ -139,7 +139,7 @@ impl ProcessStore for DefaultStore {
 
         // Check if process already exists with different ppid
         let old_ppid = {
-            let map = self.inner.lock().unwrap();
+            let map = self.inner.lock().expect("lock poisoned");
             map.get(&pid).map(|e| e.value.ppid)
         };
 
@@ -147,7 +147,7 @@ impl ProcessStore for DefaultStore {
         insert_inner(&self.inner, pid, info);
 
         // Update children index
-        let mut index = self.children_index.lock().unwrap();
+        let mut index = self.children_index.lock().expect("lock poisoned");
 
         // Remove from old parent's index if ppid changed
         if let Some(old_ppid) = old_ppid
@@ -167,13 +167,13 @@ impl ProcessStore for DefaultStore {
     fn remove_process(&self, pid: u32) -> Option<ProcessInfo> {
         // Remove from inner
         let info = {
-            let mut map = self.inner.lock().unwrap();
+            let mut map = self.inner.lock().expect("lock poisoned");
             map.remove(&pid).map(|e| e.value)
         };
 
         // Remove from children index
         if let Some(ref p) = info {
-            let mut index = self.children_index.lock().unwrap();
+            let mut index = self.children_index.lock().expect("lock poisoned");
             // Remove from parent's index
             if let Some(children) = index.get_mut(&p.ppid) {
                 children.retain(|&c| c != pid);
@@ -186,14 +186,14 @@ impl ProcessStore for DefaultStore {
     }
 
     fn all_pids(&self) -> Vec<u32> {
-        self.inner.lock().unwrap().keys().copied().collect()
+        self.inner.lock().expect("lock poisoned").keys().copied().collect()
     }
 
     fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32)) {
         // Collect children first, then release lock before calling f.
         // f may call insert_process which also locks children_index.
         let children: Vec<u32> = {
-            let index = self.children_index.lock().unwrap();
+            let index = self.children_index.lock().expect("lock poisoned");
             index.get(&pid).cloned().unwrap_or_default()
         };
         for child in children {
