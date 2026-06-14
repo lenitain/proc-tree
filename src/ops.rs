@@ -185,13 +185,12 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
         }
         ProcEvent::Exit { pid } => {
             // Orphan children to init (PID 1)
-            let children = store.children_of(*pid);
-            for child_pid in children {
+            store.for_each_child(*pid, &mut |child_pid| {
                 if let Some(mut info) = store.get_process(child_pid) {
                     info.ppid = 1;
                     store.insert_process(child_pid, info);
                 }
-            }
+            });
             return Some(ExitedProcess { pid: *pid });
         }
     }

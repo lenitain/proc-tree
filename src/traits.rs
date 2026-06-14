@@ -22,6 +22,17 @@ pub trait ProcessStore {
     /// Get all PIDs in the tree.
     fn all_pids(&self) -> Vec<u32>;
 
-    /// Get direct children of a PID.
-    fn children_of(&self, pid: u32) -> Vec<u32>;
+    /// Iterate direct children of a PID.
+    ///
+    /// Calls `f` for each child PID. Avoids allocating a return Vec.
+    fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32));
+
+    /// Get direct children of a PID as a Vec.
+    ///
+    /// Convenience wrapper around [`for_each_child`](ProcessStore::for_each_child).
+    fn children_of(&self, pid: u32) -> Vec<u32> {
+        let mut v = Vec::new();
+        self.for_each_child(pid, &mut |c| v.push(c));
+        v
+    }
 }

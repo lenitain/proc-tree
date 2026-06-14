@@ -189,14 +189,13 @@ impl ProcessStore for DefaultStore {
         self.inner.lock().unwrap().keys().copied().collect()
     }
 
-    fn children_of(&self, pid: u32) -> Vec<u32> {
-        // O(1) lookup from index
-        self.children_index
-            .lock()
-            .unwrap()
-            .get(&pid)
-            .cloned()
-            .unwrap_or_default()
+    fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32)) {
+        let index = self.children_index.lock().unwrap();
+        if let Some(children) = index.get(&pid) {
+            for &child in children {
+                f(child);
+            }
+        }
     }
 }
 

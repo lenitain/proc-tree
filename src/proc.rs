@@ -170,7 +170,7 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
             if let Some(uid_str) = val.split_whitespace().next()
                 && let Ok(uid) = uid_str.parse::<u32>()
             {
-                user = uid_to_username(uid).unwrap_or_else(|| UNKNOWN.to_string());
+                user = uid_to_username(uid).unwrap_or(UNKNOWN).to_owned();
             } else {
                 user = UNKNOWN.to_string();
             }
@@ -200,8 +200,8 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
 ///
 /// This function is used internally by [`parse_proc_entry`] to populate
 /// the `user` field of [`super::types::ProcessInfo`].
-pub fn uid_to_username(uid: u32) -> Option<String> {
-    uid_passwd_map().get(&uid).cloned()
+pub fn uid_to_username(uid: u32) -> Option<&'static str> {
+    uid_passwd_map().get(&uid).map(|s| s.as_str())
 }
 
 #[cfg(test)]
@@ -235,7 +235,7 @@ mod tests {
     fn test_uid_to_username_root() {
         // root (UID 0) should always exist on Linux
         let name = uid_to_username(0);
-        assert_eq!(name.as_deref(), Some("root"));
+        assert_eq!(name, Some("root"));
     }
 
     #[test]
