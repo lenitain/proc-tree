@@ -186,7 +186,12 @@ impl ProcessStore for DefaultStore {
     }
 
     fn all_pids(&self) -> Vec<u32> {
-        self.inner.lock().expect("lock poisoned").keys().copied().collect()
+        self.inner
+            .lock()
+            .expect("lock poisoned")
+            .keys()
+            .copied()
+            .collect()
     }
 
     fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32)) {
