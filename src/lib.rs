@@ -17,6 +17,7 @@
 //! #     fn remove_process(&self, pid: u32) -> Option<ProcessInfo> { None }
 //! #     fn all_pids(&self) -> Vec<u32> { vec![] }
 //! #     fn children_of(&self, pid: u32) -> Vec<u32> { vec![] }
+//! #     fn for_each_child(&self, _pid: u32, _f: &mut dyn FnMut(u32)) {}
 //! # }
 //!
 //! let store = MyStore;

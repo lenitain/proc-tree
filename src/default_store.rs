@@ -190,11 +190,14 @@ impl ProcessStore for DefaultStore {
     }
 
     fn for_each_child(&self, pid: u32, f: &mut dyn FnMut(u32)) {
-        let index = self.children_index.lock().unwrap();
-        if let Some(children) = index.get(&pid) {
-            for &child in children {
-                f(child);
-            }
+        // Collect children first, then release lock before calling f.
+        // f may call insert_process which also locks children_index.
+        let children: Vec<u32> = {
+            let index = self.children_index.lock().unwrap();
+            index.get(&pid).cloned().unwrap_or_default()
+        };
+        for child in children {
+            f(child);
         }
     }
 }
