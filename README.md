@@ -24,6 +24,12 @@ Add to your `Cargo.toml`:
 proc-tree = "0.3.0"
 ```
 
+### Requirements
+
+- Linux with `/proc` filesystem
+- No special capabilities required for snapshot mode
+- `CAP_NET_ADMIN` for real-time event updates via proc-connector
+
 ### Quick start
 
 ```rust
@@ -39,23 +45,3 @@ println!("PID 1: {} ({})", info.cmd, info.user);
 // Render pstree-style tree
 println!("{}", display(&store, 1));
 ```
-
-## Building from Source
-
-Requires Rust toolchain (tested with `rustc 1.85.0`).
-
-```bash
-git clone https://github.com/lenitain/proc-tree.git
-cd proc-tree
-cargo build --release
-```
-
-### Requirements
-
-- Linux with `/proc` filesystem
-- No special capabilities required for snapshot mode
-- `CAP_NET_ADMIN` for real-time event updates via proc-connector
-
-## License
-
-[MIT License](./LICENSE)
