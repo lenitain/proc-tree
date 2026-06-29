@@ -36,11 +36,11 @@ proc-tree = "0.3.0"
 use proc_tree::{DefaultStore, snapshot, resolve, display};
 
 let store = DefaultStore::new(600);  // TTL in seconds
-snapshot(&store);
+snapshot(&store).expect("failed to read /proc");
 
 // Resolve any PID
 let info = resolve(&store, 1).unwrap();
-println!("PID 1: {} ({})", info.cmd, info.user);
+println!("PID 1: {} ({})", info.cmd(), info.user());
 
 // Render pstree-style tree
 println!("{}", display(&store, 1));
