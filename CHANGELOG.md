@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-29
+
+### Added
+
+- **`serde` feature**: `ProcessInfo` supports `Serialize` and `Deserialize` under the optional `serde` feature flag
+  ```toml
+  proc-tree = { version = "0.4.0", features = ["serde"] }
+  ```
+
+### Changed
+
+- **Struct fields are now private** ([C-STRUCT-PRIVATE](https://rust-lang.github.io/api-guidelines/interoperability.html#types-are-send-and-sync-where-possible-c-send-sync)):
+  - `ProcessInfo`: fields `cmd`, `user`, `ppid`, `tgid`, `start_time_ns` are now private
+  - `ProcessLink`: fields `pid`, `cmd`, `user` are now private
+  - Added `ProcessInfo::new()` constructor and getter methods: `cmd()`, `user()`, `ppid()`, `tgid()`, `start_time_ns()`
+  - Added `ProcessLink::new()` constructor and getter methods: `pid()`, `cmd()`, `user()`
+
+- **`snapshot()` now returns `Result`** ([C-FAILURE](https://rust-lang.github.io/api-guidelines/development.html#all-types-have-good-developer-experience-c-good-dev-experience)):
+  ```rust
+  // Before (0.3.0)
+  snapshot(&store);
+  
+  // After (0.4.0)
+  snapshot(&store).expect("failed to read /proc");
+  ```
+
+### Fixed
+
+- **`DefaultStore` implements `Debug`** ([C-DEBUG](https://rust-lang.github.io/api-guidelines/development.html#all-types-have-good-developer-experience-c-good-dev-experience)):
+  ```rust
+  let store = DefaultStore::new(600);
+  println!("{:?}", store); // DefaultStore { len: 42, ttl: 600s }
+  ```
+
+- **`ProcessInfo` implements `PartialEq` and `Eq`** ([C-COMMON-TRAITS](https://rust-lang.github.io/api-guidelines/interoperability.html#commonly-used-types-should-be-the-same-c-common-traits)):
+  ```rust
+  let info1 = store.get_process(1).unwrap();
+  let info2 = store.get_process(1).unwrap();
+  assert_eq!(info1, info2); // Works now!
+  ```
+
+- **`ProcessLink` implements `PartialEq` and `Eq`** ([C-COMMON-TRAITS](https://rust-lang.github.io/api-guidelines/interoperability.html#commonly-used-types-should-be-the-same-c-common-traits))
+
+### Migration Guide
+
+**Struct literal syntax** (breaking):
+```rust
+// Before (0.3.0)
+let info = ProcessInfo {
+    ppid: 0,
+    cmd: "init".into(),
+    user: "root".into(),
+    tgid: 1,
+    start_time_ns: 0,
+};
+
+// After (0.4.0)
+let info = ProcessInfo::new(
+    "init".into(),
+    "root".into(),
+    0,
+    1,
+    0,
+);
+```
+
+**Field access** (breaking):
+```rust
+// Before (0.3.0)
+println!("{}", info.cmd);
+
+// After (0.4.0)
+println!("{}", info.cmd());
+```
+
+**snapshot error handling** (breaking):
+```rust
+// Before (0.3.0)
+snapshot(&store);
+
+// After (0.4.0)
+snapshot(&store).expect("failed to read /proc");
+// or
+if let Err(e) = snapshot(&store) {
+    eprintln!("Failed to snapshot: {}", e);
+}
+```
+
 ## [0.3.0] - 2026-06-14
 
 ### Changed
