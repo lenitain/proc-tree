@@ -22,8 +22,14 @@ include = [
 name = "proc_tree"
 path = "src/lib.rs"
 
+[features]
+serde = ["dep:serde"]
+
+default = []
+
 [dependencies]
 libc = "0.2"
 arrayvec = "0.7"
+serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]

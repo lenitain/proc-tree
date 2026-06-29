@@ -80,16 +80,41 @@ impl ExitedProcess {
 /// ```
 /// use proc_tree::ProcessLink;
 ///
-/// let link = ProcessLink { pid: 102, cmd: "touch".into(), user: "root".into() };
+/// let link = ProcessLink::new(102, "touch".into(), "root".into());
 /// assert_eq!(link.to_string(), "102|touch|root");
+/// assert_eq!(link.pid(), 102);
+/// assert_eq!(link.cmd(), "touch");
+/// assert_eq!(link.user(), "root");
 /// ```
 ///
 /// A chain is a `Vec<ProcessLink>` ordered from child to ancestor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessLink {
-    pub pid: u32,
-    pub cmd: String,
-    pub user: String,
+    pid: u32,
+    cmd: String,
+    user: String,
+}
+
+impl ProcessLink {
+    /// Create a new `ProcessLink`.
+    pub fn new(pid: u32, cmd: String, user: String) -> Self {
+        Self { pid, cmd, user }
+    }
+
+    /// The PID of the process.
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    /// The command name of the process.
+    pub fn cmd(&self) -> &str {
+        &self.cmd
+    }
+
+    /// The username of the process.
+    pub fn user(&self) -> &str {
+        &self.user
+    }
 }
 
 impl fmt::Display for ProcessLink {
@@ -104,25 +129,25 @@ mod tests {
 
     #[test]
     fn process_link_display_format() {
-        let link = ProcessLink {
-            pid: 42,
-            cmd: "bash".into(),
-            user: "root".into(),
-        };
+        let link = ProcessLink::new(
+            42,
+            "bash".into(),
+            "root".into(),
+        );
         assert_eq!(link.to_string(), "42|bash|root");
     }
 
     #[test]
     fn process_link_clone() {
-        let link = ProcessLink {
-            pid: 1,
-            cmd: "init".into(),
-            user: "root".into(),
-        };
+        let link = ProcessLink::new(
+            1,
+            "init".into(),
+            "root".into(),
+        );
         let link2 = link.clone();
-        assert_eq!(link.pid, link2.pid);
-        assert_eq!(link.cmd, link2.cmd);
-        assert_eq!(link.user, link2.user);
+        assert_eq!(link.pid(), link2.pid());
+        assert_eq!(link.cmd(), link2.cmd());
+        assert_eq!(link.user(), link2.user());
     }
 
     #[test]

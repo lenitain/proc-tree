@@ -182,13 +182,13 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
     // fall back to short Name: field (e.g. "bun") for kernel threads.
     let cmd = read_proc_cmdline(pid).unwrap_or(name);
     let start_time_ns = read_proc_start_time_ns(pid);
-    Some(crate::types::ProcessInfo {
+    Some(crate::types::ProcessInfo::new(
         cmd,
         user,
         ppid,
         tgid,
         start_time_ns,
-    })
+    ))
 }
 
 /// Convert a UID to a username by looking up `/etc/passwd`.
@@ -281,9 +281,9 @@ mod tests {
         // The cmd should NOT be just "init" or "systemd" (the Name: field),
         // but the full path from cmdline
         assert!(
-            info.cmd.len() > 15 || !info.cmd.contains(' '),
+            info.cmd().len() > 15 || !info.cmd().contains(' '),
             "PID 1 cmd should be full cmdline, got: {:?}",
-            info.cmd
+            info.cmd()
         );
     }
 }

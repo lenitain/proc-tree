@@ -23,11 +23,11 @@
 //! let store = MyStore;
 //!
 //! // Seed from /proc
-//! snapshot(&store);
+//! snapshot(&store).expect("failed to read /proc");
 //!
 //! // Resolve a PID
 //! if let Some(info) = resolve(&store, 1) {
-//!     println!("PID 1: cmd={}, user={}", info.cmd, info.user);
+//!     println!("PID 1: cmd={}, user={}", info.cmd(), info.user());
 //! }
 //!
 //! // Build ancestry chain

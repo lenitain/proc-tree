@@ -8,7 +8,7 @@
 //! use proc_tree::{DefaultStore, snapshot};
 //!
 //! let store = DefaultStore::new(600);
-//! snapshot(&store);
+//! snapshot(&store).expect("failed to read /proc");
 //! ```
 
 use std::collections::HashMap;
@@ -50,7 +50,7 @@ fn get_inner(
         let info = map.remove(&pid).expect("entry should exist").value;
         // Update children index
         let mut index = children_index.lock().expect("lock poisoned");
-        if let Some(children) = index.get_mut(&info.ppid) {
+        if let Some(children) = index.get_mut(&info.ppid()) {
             children.retain(|&c| c != pid);
         }
         // Clean up this process's own children index entry
@@ -122,6 +122,15 @@ impl Clone for DefaultStore {
     }
 }
 
+impl std::fmt::Debug for DefaultStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DefaultStore")
+            .field("len", &self.len())
+            .field("ttl", &self.ttl)
+            .finish()
+    }
+}
+
 impl Default for DefaultStore {
     /// Creates a store with no TTL.
     fn default() -> Self {
@@ -135,12 +144,12 @@ impl ProcessStore for DefaultStore {
     }
 
     fn insert_process(&self, pid: u32, info: ProcessInfo) {
-        let new_ppid = info.ppid;
+        let new_ppid = info.ppid();
 
         // Check if process already exists with different ppid
         let old_ppid = {
             let map = self.inner.lock().expect("lock poisoned");
-            map.get(&pid).map(|e| e.value.ppid)
+            map.get(&pid).map(|e| e.value.ppid())
         };
 
         // Insert the process
@@ -175,7 +184,7 @@ impl ProcessStore for DefaultStore {
         if let Some(ref p) = info {
             let mut index = self.children_index.lock().expect("lock poisoned");
             // Remove from parent's index
-            if let Some(children) = index.get_mut(&p.ppid) {
+            if let Some(children) = index.get_mut(&p.ppid()) {
                 children.retain(|&c| c != pid);
             }
             // Clean up this process's own children index entry
@@ -216,17 +225,11 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         let info = store.get_process(1).unwrap();
-        assert_eq!(info.ppid, 0);
-        assert_eq!(info.cmd, "init");
+        assert_eq!(info.ppid(), 0);
+        assert_eq!(info.cmd(), "init");
     }
 
     #[test]
@@ -234,13 +237,7 @@ mod tests {
         let store = DefaultStore::new(0); // ttl=0 means no expiry
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         assert!(store.get_process(1).is_some());
 
@@ -248,13 +245,7 @@ mod tests {
         let store = DefaultStore::new(1);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         assert!(store.get_process(1).is_some());
         std::thread::sleep(Duration::from_millis(1100));
@@ -266,25 +257,13 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         let store2 = store.clone();
         assert!(store2.get_process(1).is_some());
         store2.insert_process(
             2,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "bash".into(),
-                user: "root".into(),
-                tgid: 2,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0,),
         );
         assert!(store.get_process(2).is_some());
     }
@@ -295,13 +274,7 @@ mod tests {
         assert_eq!(store.len(), 0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "a".into(),
-                user: "u".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
         );
         assert_eq!(store.len(), 1);
         assert!(store.contains_key(1));
@@ -314,13 +287,7 @@ mod tests {
         assert!(store.is_empty());
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "a".into(),
-                user: "u".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
         );
         assert!(!store.is_empty());
     }
@@ -330,33 +297,15 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "a".into(),
-                user: "u".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
         );
         store.insert_process(
             2,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "b".into(),
-                user: "u".into(),
-                tgid: 2,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("b".into(), "u".into(), 1, 2, 0,),
         );
         store.insert_process(
             3,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "c".into(),
-                user: "u".into(),
-                tgid: 3,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("c".into(), "u".into(), 1, 3, 0,),
         );
         let mut pids = store.all_pids();
         pids.sort();
@@ -368,13 +317,7 @@ mod tests {
         let store = DefaultStore::new(1);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "a".into(),
-                user: "u".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
         );
         assert!(store.contains_key(1));
         std::thread::sleep(Duration::from_millis(1100));
@@ -389,23 +332,11 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             2,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "bash".into(),
-                user: "root".into(),
-                tgid: 2,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0,),
         );
 
         assert_eq!(store.len(), 2);
@@ -422,43 +353,19 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "a".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
         );
         store.insert_process(
             200,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "b".into(),
-                user: "root".into(),
-                tgid: 200,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("b".into(), "root".into(), 1, 200, 0,),
         );
         store.insert_process(
             300,
-            ProcessInfo {
-                ppid: 100,
-                cmd: "c".into(),
-                user: "root".into(),
-                tgid: 300,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("c".into(), "root".into(), 100, 300, 0,),
         );
 
         let mut kids = store.children_of(1);
@@ -476,33 +383,15 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "other".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("other".into(), "root".into(), 0, 100, 0,),
         );
         store.insert_process(
             200,
-            ProcessInfo {
-                ppid: 100,
-                cmd: "child".into(),
-                user: "root".into(),
-                tgid: 200,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
         );
 
         // child 200 is under parent 100
@@ -512,13 +401,7 @@ mod tests {
         // Re-parent 200 from 100 to 1
         store.insert_process(
             200,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "child".into(),
-                user: "root".into(),
-                tgid: 200,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("child".into(), "root".into(), 1, 200, 0,),
         );
 
         // 200 should be removed from old parent's index
@@ -535,34 +418,16 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "a".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
         );
         // Insert same pid with same ppid again
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "a".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
         );
         // Should not duplicate
         assert_eq!(store.children_of(1), vec![100]);
@@ -573,33 +438,15 @@ mod tests {
         let store = DefaultStore::new(0);
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "parent".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0,),
         );
         store.insert_process(
             200,
-            ProcessInfo {
-                ppid: 100,
-                cmd: "child".into(),
-                user: "root".into(),
-                tgid: 200,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
         );
 
         assert_eq!(store.children_of(100), vec![200]);
@@ -621,33 +468,15 @@ mod tests {
         let store = DefaultStore::new(1); // 1 second TTL
         store.insert_process(
             1,
-            ProcessInfo {
-                ppid: 0,
-                cmd: "init".into(),
-                user: "root".into(),
-                tgid: 1,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
         );
         store.insert_process(
             100,
-            ProcessInfo {
-                ppid: 1,
-                cmd: "parent".into(),
-                user: "root".into(),
-                tgid: 100,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0,),
         );
         store.insert_process(
             200,
-            ProcessInfo {
-                ppid: 100,
-                cmd: "child".into(),
-                user: "root".into(),
-                tgid: 200,
-                start_time_ns: 0,
-            },
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
         );
 
         assert_eq!(store.children_of(100), vec![200]);

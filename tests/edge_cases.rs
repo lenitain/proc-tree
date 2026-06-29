@@ -9,7 +9,7 @@ use helpers::TestStore;
 #[test]
 fn resolve_pid0() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     // PID 0 doesn't exist as a process
     let info = resolve(&store, 0);
     assert!(info.is_none(), "PID 0 should not be resolvable");
@@ -18,7 +18,7 @@ fn resolve_pid0() {
 #[test]
 fn build_chain_pid0() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let chain = build_chain_links(&store, 0);
     // PID 0 doesn't exist, should return empty or minimal chain
     let _ = chain; // just shouldn't panic
@@ -83,7 +83,7 @@ fn handle_fork_then_exec_then_exit() {
     let exited = handle_event(&store, &ProcEvent::Exit { pid });
     // Exit returns ExitedProcess handle
     assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid, pid);
+    assert_eq!(exited.as_ref().unwrap().pid(), pid);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     // Explicit removal by caller
@@ -111,7 +111,7 @@ fn exit_returns_pid() {
     // Exit returns ExitedProcess handle, process stays in store
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
     assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid, 100);
+    assert_eq!(exited.as_ref().unwrap().pid(), 100);
     // Process still in store
     assert_eq!(tree_len(&store), 1);
     assert!(store.get_process(100).is_some());
@@ -142,15 +142,15 @@ fn exit_orphans_children_before_removal() {
             timestamp_ns: 0,
         },
     );
-    assert_eq!(store.get_process(200).unwrap().ppid, 100);
+    assert_eq!(store.get_process(200).unwrap().ppid(), 100);
 
     // Exit parent - child should be orphaned to init
     let exited = handle_event(&store, &ProcEvent::Exit { pid: 100 });
     assert!(exited.is_some());
-    assert_eq!(exited.as_ref().unwrap().pid, 100);
+    assert_eq!(exited.as_ref().unwrap().pid(), 100);
 
     // Child's ppid should be 1 (init) before parent removal
-    assert_eq!(store.get_process(200).unwrap().ppid, 1);
+    assert_eq!(store.get_process(200).unwrap().ppid(), 1);
 
     // Parent still accessible
     assert!(store.get_process(100).is_some());
@@ -189,7 +189,7 @@ fn handle_events_returns_multiple_exited_pids() {
         &[ProcEvent::Exit { pid: 100 }, ProcEvent::Exit { pid: 200 }],
     );
     assert_eq!(exited.len(), 2);
-    let mut exited_pids: Vec<u32> = exited.iter().map(|ep| ep.pid).collect();
+    let mut exited_pids: Vec<u32> = exited.iter().map(|ep| ep.pid()).collect();
     exited_pids.sort();
     assert_eq!(exited_pids, vec![100, 200]);
 
@@ -277,24 +277,16 @@ fn is_descendant_with_cycle() {
 
 #[test]
 fn process_link_clone() {
-    let link = ProcessLink {
-        pid: 1,
-        cmd: "init".into(),
-        user: "root".into(),
-    };
+    let link = ProcessLink::new(1, "init".into(), "root".into(),);
     let link2 = link.clone();
-    assert_eq!(link.pid, link2.pid);
-    assert_eq!(link.cmd, link2.cmd);
-    assert_eq!(link.user, link2.user);
+    assert_eq!(link.pid(), link2.pid());
+    assert_eq!(link.cmd(), link2.cmd());
+    assert_eq!(link.user(), link2.user());
 }
 
 #[test]
 fn process_link_debug() {
-    let link = ProcessLink {
-        pid: 1,
-        cmd: "init".into(),
-        user: "root".into(),
-    };
+    let link = ProcessLink::new(1, "init".into(), "root".into(),);
     let debug = format!("{:?}", link);
     assert!(debug.contains("ProcessLink"));
     assert!(debug.contains("1"));

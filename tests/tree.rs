@@ -10,7 +10,7 @@ use helpers::TestStore;
 fn snapshot_populates_store() {
     let store = TestStore::default();
     assert_eq!(tree_len(&store), 0);
-    snapshot(&store);
+    let _ = snapshot(&store);
     assert!(
         tree_len(&store) > 0,
         "store should have entries after snapshot"
@@ -20,9 +20,9 @@ fn snapshot_populates_store() {
 #[test]
 fn snapshot_idempotent() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let _len1 = tree_len(&store);
-    snapshot(&store);
+    let _ = snapshot(&store);
     let len2 = tree_len(&store);
     // Should be same or similar (processes may have changed)
     assert!(len2 > 0, "store should still have entries");
@@ -31,7 +31,7 @@ fn snapshot_idempotent() {
 #[test]
 fn snapshot_includes_pid1() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let info = resolve(&store, 1);
     assert!(info.is_some(), "PID 1 should be in store after snapshot");
 }
@@ -41,22 +41,22 @@ fn snapshot_includes_pid1() {
 #[test]
 fn build_chain_pid1() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let chain = build_chain_links(&store, 1);
     assert!(!chain.is_empty(), "PID 1 should have a chain");
-    assert_eq!(chain[0].pid, 1, "chain should start with PID 1");
+    assert_eq!(chain[0].pid(), 1, "chain should start with PID 1");
 }
 
 #[test]
 fn build_chain_current_process() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let my_pid = std::process::id();
     let chain = build_chain_links(&store, my_pid);
     assert!(!chain.is_empty(), "current process should have a chain");
-    assert_eq!(chain[0].pid, my_pid, "chain should start with current PID");
+    assert_eq!(chain[0].pid(), my_pid, "chain should start with current PID");
     // Chain should end at PID 1
-    assert_eq!(chain.last().unwrap().pid, 1, "chain should end at PID 1");
+    assert_eq!(chain.last().unwrap().pid(), 1, "chain should end at PID 1");
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn build_chain_nonexistent() {
 #[test]
 fn build_chain_string_format() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let s = build_chain_string(&store, 1);
     assert!(s.contains("1|"), "should contain PID 1 with pipe separator");
 }
@@ -81,7 +81,7 @@ fn build_chain_string_format() {
 #[test]
 fn build_chain_string_current_process() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let my_pid = std::process::id();
     let s = build_chain_string(&store, my_pid);
     assert!(
@@ -95,7 +95,7 @@ fn build_chain_string_current_process() {
 #[test]
 fn is_descendant_self_is_not_descendant() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     // A process is not considered a descendant of itself
     assert!(!is_descendant(&store, 1, "init"));
 }
@@ -103,14 +103,14 @@ fn is_descendant_self_is_not_descendant() {
 #[test]
 fn is_descendant_current_of_init() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let my_pid = std::process::id();
     // Every process is a descendant of init/systemd
     let info = resolve(&store, 1).unwrap();
     assert!(
-        is_descendant(&store, my_pid, &info.cmd),
+        is_descendant(&store, my_pid, &info.cmd()),
         "current process should be descendant of PID 1 ({})",
-        info.cmd
+        info.cmd()
     );
 }
 
@@ -125,7 +125,7 @@ fn is_descendant_nonexistent() {
 #[test]
 fn children_of_pid1() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let kids = children(&store, 1);
     assert!(!kids.is_empty(), "PID 1 should have children");
 }
@@ -133,7 +133,7 @@ fn children_of_pid1() {
 #[test]
 fn descendants_of_pid1() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let desc = descendants(&store, 1);
     // All processes except PID 1 itself
     assert!(desc.len() > 1, "PID 1 should have multiple descendants");
@@ -151,7 +151,7 @@ fn children_nonexistent() {
 #[test]
 fn siblings_of_current_process() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let my_pid = std::process::id();
     let sib = siblings(&store, my_pid);
     // Current process should not be in its own siblings list
@@ -163,16 +163,16 @@ fn siblings_of_current_process() {
 #[test]
 fn find_by_cmd_init() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let info = resolve(&store, 1).unwrap();
-    let found = find_by_cmd(&store, &info.cmd);
+    let found = find_by_cmd(&store, &info.cmd());
     assert!(found.contains(&1), "should find PID 1 by its cmd");
 }
 
 #[test]
 fn find_by_cmd_nonexistent() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let found = find_by_cmd(&store, "definitely_not_a_real_process_name_12345");
     assert!(found.is_empty(), "should not find nonexistent cmd");
 }
@@ -180,7 +180,7 @@ fn find_by_cmd_nonexistent() {
 #[test]
 fn find_by_user_root() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let found = find_by_user(&store, "root");
     assert!(!found.is_empty(), "should find at least one root process");
     assert!(found.contains(&1), "PID 1 should be root");
@@ -189,7 +189,7 @@ fn find_by_user_root() {
 #[test]
 fn find_by_user_nonexistent() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let found = find_by_user(&store, "definitely_not_a_real_user_12345");
     assert!(found.is_empty(), "should not find nonexistent user");
 }
@@ -211,7 +211,7 @@ fn fork_creates_tree_node() {
     // After fork, child should be resolvable via chain
     let chain = build_chain_links(&store, 500);
     assert!(!chain.is_empty(), "forked PID should have a chain");
-    assert_eq!(chain[0].pid, 500);
+    assert_eq!(chain[0].pid(), 500);
 }
 
 #[test]

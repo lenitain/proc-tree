@@ -6,28 +6,20 @@ use helpers::TestStore;
 
 #[test]
 fn process_link_display_format() {
-    let link = ProcessLink {
-        pid: 42,
-        cmd: "bash".into(),
-        user: "root".into(),
-    };
+    let link = ProcessLink::new(42, "bash".into(), "root".into(),);
     assert_eq!(link.to_string(), "42|bash|root");
 }
 
 #[test]
 fn process_link_display_special_chars() {
-    let link = ProcessLink {
-        pid: 1,
-        cmd: "systemd".into(),
-        user: "root".into(),
-    };
+    let link = ProcessLink::new(1, "systemd".into(), "root".into(),);
     assert_eq!(link.to_string(), "1|systemd|root");
 }
 
 #[test]
 fn chain_string_semicolon_separated() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let my_pid = std::process::id();
     let s = build_chain_string(&store, my_pid);
     // Should contain semicolons between links
@@ -38,7 +30,7 @@ fn chain_string_semicolon_separated() {
 #[test]
 fn chain_string_each_link_has_pipes() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let s = build_chain_string(&store, 1);
     let parts: Vec<&str> = s.split(';').collect();
     for part in &parts {
@@ -67,7 +59,7 @@ fn display_single_process() {
 #[test]
 fn display_with_children() {
     let store = TestStore::default();
-    snapshot(&store);
+    let _ = snapshot(&store);
     let d = display(&store, 1);
     // Should contain tree characters
     assert!(
