@@ -277,7 +277,7 @@ fn is_descendant_with_cycle() {
 
 #[test]
 fn process_link_clone() {
-    let link = ProcessLink::new(1, "init".into(), "root".into());
+    let link = ProcessLink::new(1, "init".into(), "init".into(), "root".into());
     let link2 = link.clone();
     assert_eq!(link.pid(), link2.pid());
     assert_eq!(link.cmd(), link2.cmd());
@@ -286,7 +286,7 @@ fn process_link_clone() {
 
 #[test]
 fn process_link_debug() {
-    let link = ProcessLink::new(1, "init".into(), "root".into());
+    let link = ProcessLink::new(1, "init".into(), "init".into(), "root".into());
     let debug = format!("{:?}", link);
     assert!(debug.contains("ProcessLink"));
     assert!(debug.contains("1"));

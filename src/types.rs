@@ -4,7 +4,11 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ProcessInfo {
-    /// Command name (from `/proc/{pid}/comm`).
+    /// Binary name from `/proc/{pid}/comm` (truncated to 15 chars by kernel).
+    /// Used for process tree matching.
+    comm: String,
+    /// Full command line from `/proc/{pid}/cmdline`.
+    /// Falls back to `comm` for kernel threads with empty cmdline.
     cmd: String,
     /// Username (from UID lookup via `/etc/passwd`).
     user: String,
@@ -19,8 +23,16 @@ pub struct ProcessInfo {
 
 impl ProcessInfo {
     /// Create a new `ProcessInfo`.
-    pub fn new(cmd: String, user: String, ppid: u32, tgid: u32, start_time_ns: u64) -> Self {
+    pub fn new(
+        comm: String,
+        cmd: String,
+        user: String,
+        ppid: u32,
+        tgid: u32,
+        start_time_ns: u64,
+    ) -> Self {
         Self {
+            comm,
             cmd,
             user,
             ppid,
@@ -29,7 +41,14 @@ impl ProcessInfo {
         }
     }
 
-    /// Command name (from `/proc/{pid}/comm`).
+    /// Binary name from `/proc/{pid}/comm` (truncated to 15 chars).
+    /// Use this for process tree matching.
+    pub fn comm(&self) -> &str {
+        &self.comm
+    }
+
+    /// Full command line from `/proc/{pid}/cmdline`.
+    /// Use this for display/logging.
     pub fn cmd(&self) -> &str {
         &self.cmd
     }

@@ -21,7 +21,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-proc-tree = "0.4.0"
+proc-tree = "0.5.0"
 ```
 
 ### Requirements
@@ -40,17 +40,68 @@ snapshot(&store).expect("failed to read /proc");
 
 // Resolve any PID
 let info = resolve(&store, 1).unwrap();
-println!("PID 1: {} ({})", info.cmd(), info.user());
+println!("PID 1: {} ({})", info.comm(), info.user());  // "systemd" (binary name)
+println!("PID 1 cmd: {}", info.cmd());  // "/usr/lib/systemd/systemd --user" (full cmdline)
 
 // Render pstree-style tree
 println!("{}", display(&store, 1));
 ```
 
+### Process matching
+
+Use `comm()` for process tree matching — it returns the binary name from `/proc/pid/comm`:
+
+```rust
+use proc_tree::{DefaultStore, snapshot, is_descendant, find_by_cmd};
+
+let store = DefaultStore::new(600);
+snapshot(&store).expect("failed to read /proc");
+
+// Check if current process is a descendant of "bash"
+let my_pid = std::process::id();
+if is_descendant(&store, my_pid, "bash") {
+    println!("Running under bash");
+}
+
+// Find all bash processes
+let bash_pids = find_by_cmd(&store, "bash");
+```
+
+### Ancestry chains
+
+`build_chain_string()` returns a JSON array, `build_chain_links()` returns `Vec<ProcessLink>`:
+
+```rust
+use proc_tree::{DefaultStore, snapshot, build_chain_string, build_chain_links};
+
+let store = DefaultStore::new(600);
+snapshot(&store).expect("failed to read /proc");
+
+let my_pid = std::process::id();
+
+// JSON string (for logging / serialization)
+let json = build_chain_string(&store, my_pid);
+println!("{}", json);
+// [{"pid":1234,"comm":"touch","cmd":"touch /tmp/foo","user":"root"}, ...]
+
+// Structured data (for programmatic access)
+let links = build_chain_links(&store, my_pid);
+for link in &links {
+    println!("{} ({})", link.comm(), link.user());
+}
+```
+
 ### Serde support
 
-Enable the `serde` feature to serialize/deserialize `ProcessInfo`:
+`serde` feature is enabled by default — `ProcessInfo` and `ProcessLink` support `Serialize`/`Deserialize`:
 
 ```toml
 [dependencies]
-proc-tree = { version = "0.4.0", features = ["serde"] }
+proc-tree = "0.5.0"
+```
+
+To disable:
+```toml
+[dependencies]
+proc-tree = { version = "0.5.0", default-features = false }
 ```

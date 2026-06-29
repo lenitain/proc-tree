@@ -2,8 +2,6 @@
 //!
 //! All functions are generic over [`ProcessStore`] so they work with any storage backend.
 
-use std::fmt::Write;
-
 use crate::traits::ProcessStore;
 use crate::tree::{ExitedProcess, ProcEvent, ProcessLink};
 use crate::types::ProcessInfo;
@@ -164,12 +162,26 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
         } => {
             store.insert_process(
                 *child_pid,
-                ProcessInfo::new(String::new(), String::new(), *parent_pid, 0, 0),
+                ProcessInfo::new(
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    *parent_pid,
+                    0,
+                    0,
+                ),
             );
         }
         ProcEvent::Exec { pid, .. } => {
             let info = crate::proc::parse_proc_entry(*pid).unwrap_or_else(|| {
-                ProcessInfo::new(UNKNOWN.to_string(), UNKNOWN.to_string(), 0, 0, 0)
+                ProcessInfo::new(
+                    UNKNOWN.to_string(),
+                    UNKNOWN.to_string(),
+                    UNKNOWN.to_string(),
+                    0,
+                    0,
+                    0,
+                )
             });
             // Keep start_time_ns from /proc, don't overwrite with event timestamp
             store.insert_process(*pid, info);
@@ -179,6 +191,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
             store.for_each_child(*pid, &mut |child_pid| {
                 if let Some(mut info) = store.get_process(child_pid) {
                     info = ProcessInfo::new(
+                        info.comm().to_string(),
                         info.cmd().to_string(),
                         info.user().to_string(),
                         1,
@@ -200,9 +213,9 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
 /// use proc_tree::{DefaultStore, is_descendant, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("sshd".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("bash".into(), "root".into(), 100, 200, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("sshd".into(), "sshd".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("bash".into(), "bash".into(), "root".into(), 100, 200, 0));
 ///
 /// assert!(is_descendant(&store, 200, "sshd"));
 /// assert!(is_descendant(&store, 200, "init"));
@@ -210,7 +223,7 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
 /// assert!(!is_descendant(&store, 1, "sshd")); // init is not a descendant of sshd
 /// ```
 pub fn is_descendant(store: &impl ProcessStore, pid: u32, target_cmd: &str) -> bool {
-    walk_ancestors(store, pid, |info| info.cmd() == target_cmd)
+    walk_ancestors(store, pid, |info| info.comm() == target_cmd)
 }
 
 /// Walk up the process tree from `pid`, calling `predicate` on each ancestor.
@@ -251,6 +264,7 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
             Some(info) => {
                 parts.push(ProcessLink::new(
                     current,
+                    info.comm().to_string(),
                     info.cmd().to_string(),
                     info.user().to_string(),
                 ));
@@ -262,6 +276,7 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
             None => {
                 parts.push(ProcessLink::new(
                     current,
+                    UNKNOWN.to_string(),
                     UNKNOWN.to_string(),
                     UNKNOWN.to_string(),
                 ));
@@ -281,27 +296,20 @@ pub fn build_chain_links(store: &impl ProcessStore, pid: u32) -> Vec<ProcessLink
 ///
 /// let store = DefaultStore::new(0);
 ///
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("sshd".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("bash".into(), "root".into(), 100, 200, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("sshd".into(), "sshd".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("bash".into(), "bash".into(), "root".into(), 100, 200, 0));
 ///
 /// let chain = build_chain_string(&store, 200);
-/// assert_eq!(chain, "200|bash|root;100|sshd|root;1|init|root");
+/// // Returns JSON array: [{"pid":200,"comm":"bash","cmd":"bash","user":"root"}, ...]
+/// assert!(chain.contains("\"comm\":\"bash\""));
 /// ```
 pub fn build_chain_string(store: &impl ProcessStore, pid: u32) -> String {
     let links = build_chain_links(store, pid);
     if links.is_empty() {
         return String::new();
     }
-    let mut result = String::new();
-    for (i, link) in links.iter().enumerate() {
-        if i > 0 {
-            result.push(';');
-        }
-        // SAFETY: writing to String never fails
-        let _ = write!(result, "{link}");
-    }
-    result
+    serde_json::to_string(&links).unwrap_or_default()
 }
 
 /// Get direct children of a PID.
@@ -310,10 +318,10 @@ pub fn build_chain_string(store: &impl ProcessStore, pid: u32) -> String {
 /// use proc_tree::{DefaultStore, children, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 1, 200, 0));
-/// store.insert_process(300, ProcessInfo::new("c".into(), "root".into(), 100, 300, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("a".into(), "a".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("b".into(), "b".into(), "root".into(), 1, 200, 0));
+/// store.insert_process(300, ProcessInfo::new("c".into(), "c".into(), "root".into(), 100, 300, 0));
 ///
 /// let mut kids = children(&store, 1);
 /// kids.sort();
@@ -331,10 +339,10 @@ pub fn children(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// use proc_tree::{DefaultStore, descendants, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 100, 200, 0));
-/// store.insert_process(300, ProcessInfo::new("c".into(), "root".into(), 200, 300, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("a".into(), "a".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("b".into(), "b".into(), "root".into(), 100, 200, 0));
+/// store.insert_process(300, ProcessInfo::new("c".into(), "c".into(), "root".into(), 200, 300, 0));
 ///
 /// let mut desc = descendants(&store, 1);
 /// desc.sort();
@@ -363,10 +371,10 @@ pub fn descendants(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// use proc_tree::{DefaultStore, siblings, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 1, 200, 0));
-/// store.insert_process(300, ProcessInfo::new("c".into(), "root".into(), 1, 300, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("a".into(), "a".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("b".into(), "b".into(), "root".into(), 1, 200, 0));
+/// store.insert_process(300, ProcessInfo::new("c".into(), "c".into(), "root".into(), 1, 300, 0));
 ///
 /// let mut sibs = siblings(&store, 100);
 /// sibs.sort();
@@ -390,10 +398,10 @@ pub fn siblings(store: &impl ProcessStore, pid: u32) -> Vec<u32> {
 /// use proc_tree::{DefaultStore, find_by_cmd, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("sshd".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("sshd".into(), "root".into(), 1, 200, 0));
-/// store.insert_process(300, ProcessInfo::new("bash".into(), "root".into(), 1, 300, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("sshd".into(), "sshd".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("sshd".into(), "sshd".into(), "root".into(), 1, 200, 0));
+/// store.insert_process(300, ProcessInfo::new("bash".into(), "bash".into(), "root".into(), 1, 300, 0));
 ///
 /// let mut sshds = find_by_cmd(&store, "sshd");
 /// sshds.sort();
@@ -406,7 +414,7 @@ pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
         |pid| {
             store
                 .get_process(pid)
-                .map(|info| info.cmd().to_string())
+                .map(|info| info.comm().to_string())
                 .filter(|c| !c.is_empty())
                 .or_else(|| crate::proc::read_proc_comm(pid))
         },
@@ -421,8 +429,8 @@ pub fn find_by_cmd(store: &impl ProcessStore, target_cmd: &str) -> Vec<u32> {
 ///
 /// let store = DefaultStore::new(0);
 ///
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("bash".into(), "alice".into(), 1, 100, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("bash".into(), "bash".into(), "alice".into(), 1, 100, 0));
 ///
 /// assert_eq!(find_by_user(&store, "root"), vec![1]);
 /// assert_eq!(find_by_user(&store, "alice"), vec![100]);
@@ -461,9 +469,9 @@ where
 /// use proc_tree::{DefaultStore, display, ProcessStore, ProcessInfo};
 ///
 /// let store = DefaultStore::new(0);
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(100, ProcessInfo::new("sshd".into(), "root".into(), 1, 100, 0));
-/// store.insert_process(200, ProcessInfo::new("cron".into(), "root".into(), 1, 200, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(100, ProcessInfo::new("sshd".into(), "sshd".into(), "root".into(), 1, 100, 0));
+/// store.insert_process(200, ProcessInfo::new("cron".into(), "cron".into(), "root".into(), 1, 200, 0));
 ///
 /// let output = display(&store, 1);
 /// assert!(output.starts_with("init"));
@@ -527,8 +535,8 @@ fn get_cmd(store: &impl ProcessStore, pid: u32) -> String {
 /// let store = DefaultStore::new(0);
 /// assert_eq!(tree_len(&store), 0);
 ///
-/// store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-/// store.insert_process(2, ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0));
+/// store.insert_process(1, ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0));
+/// store.insert_process(2, ProcessInfo::new("bash".into(), "bash".into(), "root".into(), 1, 2, 0));
 /// assert_eq!(tree_len(&store), 2);
 /// ```
 pub fn tree_len(store: &impl ProcessStore) -> usize {
@@ -543,16 +551,28 @@ mod tests {
     #[test]
     fn display_single_node() {
         let store = DefaultStore::new(0);
-        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
+        store.insert_process(
+            1,
+            ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0),
+        );
         assert_eq!(display(&store, 1), "init");
     }
 
     #[test]
     fn display_root_with_children() {
         let store = DefaultStore::new(0);
-        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
-        store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
-        store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 1, 200, 0));
+        store.insert_process(
+            1,
+            ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0),
+        );
+        store.insert_process(
+            100,
+            ProcessInfo::new("a".into(), "a".into(), "root".into(), 1, 100, 0),
+        );
+        store.insert_process(
+            200,
+            ProcessInfo::new("b".into(), "b".into(), "root".into(), 1, 200, 0),
+        );
         let d = display(&store, 1);
         assert!(d.starts_with("init"));
         assert!(d.contains("a"));

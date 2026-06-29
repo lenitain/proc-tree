@@ -79,7 +79,11 @@ fn build_chain_string_format() {
     let store = TestStore::default();
     let _ = snapshot(&store);
     let s = build_chain_string(&store, 1);
-    assert!(s.contains("1|"), "should contain PID 1 with pipe separator");
+    // Format: JSON array
+    assert!(s.starts_with('['), "should start with JSON array");
+    assert!(s.ends_with(']'), "should end with JSON array");
+    let links: Vec<serde_json::Value> = serde_json::from_str(&s).unwrap();
+    assert!(!links.is_empty(), "chain should have entries");
 }
 
 #[test]
@@ -88,10 +92,11 @@ fn build_chain_string_current_process() {
     let _ = snapshot(&store);
     let my_pid = std::process::id();
     let s = build_chain_string(&store, my_pid);
-    assert!(
-        s.contains(&format!("{}|", my_pid)),
-        "should start with current PID"
-    );
+    // Format: JSON array
+    let links: Vec<serde_json::Value> = serde_json::from_str(&s).unwrap();
+    assert!(!links.is_empty(), "chain should not be empty");
+    // First entry should have current PID
+    assert_eq!(links[0]["pid"].as_u64().unwrap(), my_pid as u64);
 }
 
 // ---- is_descendant ----
@@ -112,9 +117,9 @@ fn is_descendant_current_of_init() {
     // Every process is a descendant of init/systemd
     let info = resolve(&store, 1).unwrap();
     assert!(
-        is_descendant(&store, my_pid, info.cmd()),
+        is_descendant(&store, my_pid, info.comm()),
         "current process should be descendant of PID 1 ({})",
-        info.cmd()
+        info.comm()
     );
 }
 
@@ -122,6 +127,81 @@ fn is_descendant_current_of_init() {
 fn is_descendant_nonexistent() {
     let store = TestStore::default();
     assert!(!is_descendant(&store, 0x7FFFFFFF, "anything"));
+}
+
+#[test]
+fn is_descendant_matches_by_comm_not_cmd() {
+    let store = TestStore::default();
+    // Insert process with comm="touch", cmd="touch /tmp/foo bar"
+    store.insert_process(
+        1,
+        ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0),
+    );
+    store.insert_process(
+        100,
+        ProcessInfo::new(
+            "touch".into(),
+            "touch /tmp/foo bar".into(),
+            "root".into(),
+            1,
+            100,
+            0,
+        ),
+    );
+    store.insert_process(
+        200,
+        ProcessInfo::new("bash".into(), "bash -l".into(), "root".into(), 100, 200, 0),
+    );
+
+    // Should match by comm ("touch"), not by cmd ("touch /tmp/foo bar")
+    assert!(is_descendant(&store, 200, "touch"));
+    // Should NOT match by full cmd
+    assert!(!is_descendant(&store, 200, "touch /tmp/foo bar"));
+    // Should match by comm of ancestor
+    assert!(is_descendant(&store, 200, "init"));
+    // PID 200 itself has comm="bash", so it IS a descendant of "bash" (itself)
+    assert!(is_descendant(&store, 200, "bash"));
+}
+
+#[test]
+fn find_by_cmd_matches_by_comm() {
+    let store = TestStore::default();
+    store.insert_process(
+        1,
+        ProcessInfo::new("init".into(), "init".into(), "root".into(), 0, 1, 0),
+    );
+    store.insert_process(
+        100,
+        ProcessInfo::new(
+            "touch".into(),
+            "touch /tmp/foo".into(),
+            "root".into(),
+            1,
+            100,
+            0,
+        ),
+    );
+    store.insert_process(
+        200,
+        ProcessInfo::new(
+            "touch".into(),
+            "touch /tmp/bar".into(),
+            "root".into(),
+            1,
+            200,
+            0,
+        ),
+    );
+
+    // find_by_cmd should match by comm
+    let found = find_by_cmd(&store, "touch");
+    assert!(found.contains(&100));
+    assert!(found.contains(&200));
+    assert_eq!(found.len(), 2);
+
+    // Should not match by full cmd
+    let found = find_by_cmd(&store, "touch /tmp/foo");
+    assert!(found.is_empty());
 }
 
 // ---- Children / Descendants ----
@@ -169,7 +249,7 @@ fn find_by_cmd_init() {
     let store = TestStore::default();
     let _ = snapshot(&store);
     let info = resolve(&store, 1).unwrap();
-    let found = find_by_cmd(&store, info.cmd());
+    let found = find_by_cmd(&store, info.comm());
     assert!(found.contains(&1), "should find PID 1 by its cmd");
 }
 

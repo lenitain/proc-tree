@@ -80,30 +80,42 @@ impl ExitedProcess {
 /// ```
 /// use proc_tree::ProcessLink;
 ///
-/// let link = ProcessLink::new(102, "touch".into(), "root".into());
-/// assert_eq!(link.to_string(), "102|touch|root");
+/// let link = ProcessLink::new(102, "touch".into(), "touch /tmp/foo".into(), "root".into());
+/// assert_eq!(link.to_string(), "102|touch /tmp/foo|root");
 /// assert_eq!(link.pid(), 102);
-/// assert_eq!(link.cmd(), "touch");
+/// assert_eq!(link.comm(), "touch");
+/// assert_eq!(link.cmd(), "touch /tmp/foo");
 /// assert_eq!(link.user(), "root");
 /// ```
 ///
 /// A chain is a `Vec<ProcessLink>` ordered from child to ancestor.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProcessLink {
     pid: u32,
+    comm: String,
     cmd: String,
     user: String,
 }
 
 impl ProcessLink {
     /// Create a new `ProcessLink`.
-    pub fn new(pid: u32, cmd: String, user: String) -> Self {
-        Self { pid, cmd, user }
+    pub fn new(pid: u32, comm: String, cmd: String, user: String) -> Self {
+        Self {
+            pid,
+            comm,
+            cmd,
+            user,
+        }
     }
 
     /// The PID of the process.
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+
+    /// Binary name (from `/proc/{pid}/comm`).
+    pub fn comm(&self) -> &str {
+        &self.comm
     }
 
     /// The command name of the process.
@@ -129,13 +141,13 @@ mod tests {
 
     #[test]
     fn process_link_display_format() {
-        let link = ProcessLink::new(42, "bash".into(), "root".into());
+        let link = ProcessLink::new(42, "bash".into(), "bash".into(), "root".into());
         assert_eq!(link.to_string(), "42|bash|root");
     }
 
     #[test]
     fn process_link_clone() {
-        let link = ProcessLink::new(1, "init".into(), "root".into());
+        let link = ProcessLink::new(1, "init".into(), "init".into(), "root".into());
         let link2 = link.clone();
         assert_eq!(link.pid(), link2.pid());
         assert_eq!(link.cmd(), link2.cmd());

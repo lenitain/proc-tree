@@ -5,6 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-30
+
+### Added
+
+- **`comm` field on `ProcessInfo`**: stores binary name from `/proc/pid/comm` (e.g. `"touch"`), separate from `cmd` which stores full command line from `/proc/pid/cmdline` (e.g. `"touch /tmp/foo"`)
+  - `ProcessInfo::comm()` — binary name for matching
+  - `ProcessInfo::cmd()` — full command line for display
+  - Mirrors how tools like `btop` identify processes
+
+- **`comm` field on `ProcessLink`**: each chain link now carries both `comm` and `cmd`
+
+- **`serde` feature enabled by default**: no longer need to specify `features = ["serde"]`
+  ```toml
+  # Before
+  proc-tree = { version = "0.4", features = ["serde"] }
+  # After
+  proc-tree = "0.5"
+  ```
+
+### Changed
+
+- **`is_descendant()` uses `comm` for matching**:
+  ```rust
+  // Before: exact match against full cmdline
+  info.cmd() == target_cmd  // "touch /tmp/foo" != "touch"
+  // After: match against binary name
+  info.comm() == target_cmd  // "touch" == "touch"
+  ```
+
+- **`find_by_cmd()` uses `comm` for matching**
+
+- **`build_chain_string()` returns JSON array**:
+  ```rust
+  // Before
+  "200|bash|root;100|sshd|root;1|init|root"
+  // After
+  [{"pid":200,"comm":"bash","cmd":"bash","user":"root"},{"pid":100,"comm":"sshd","cmd":"sshd","user":"root"}]
+  ```
+  - Escaped by serde, safe for jq and other JSON tools
+  - No separator conflicts with `|`, `;`, or `→` in command lines
+
+- **`ProcessLink` derives `Serialize` and `Deserialize`**
+
+### Fixed
+
+- **Process name matching**: commit `0.2.1` changed `parse_proc_entry()` to read full cmdline, but `is_descendant()` still compared against the full string — `touch what.txt` would not match target `touch`. Now uses `comm` (binary name) for matching.
+
+### Migration Guide
+
+**`ProcessInfo::new()`** (breaking):
+```rust
+// Before (0.4)
+ProcessInfo::new("touch /tmp/foo".into(), "root".into(), 0, 1, 0)
+// After (0.5)
+ProcessInfo::new("touch".into(), "touch /tmp/foo".into(), "root".into(), 0, 1, 0)
+```
+
+**`ProcessLink::new()`** (breaking):
+```rust
+// Before (0.4)
+ProcessLink::new(1, "bash".into(), "root".into())
+// After (0.5)
+ProcessLink::new(1, "bash".into(), "bash -l".into(), "root".into())
+```
+
+**Chain string format** (breaking):
+```rust
+// Before: parse with string split
+let parts: Vec<&str> = chain.split(';').collect();
+// After: parse with serde
+let links: Vec<ProcessLink> = serde_json::from_str(&chain).unwrap();
+// Or use build_chain_links() directly for Vec<ProcessLink>
+```
+
 ## [0.4.0] - 2026-06-29
 
 ### Added

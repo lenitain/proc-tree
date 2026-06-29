@@ -138,11 +138,7 @@ pub fn read_proc_cmdline(pid: u32) -> Option<String> {
     Some(trimmed.replace('\0', " "))
 }
 
-/// Parse `/proc/{pid}/status` and `/proc/{pid}/cmdline` into a `ProcessInfo`.
-///
-/// The `cmd` field is populated from `/proc/{pid}/cmdline` (full command line
-/// with arguments), falling back to the `Name:` field from `/proc/{pid}/status`
-/// (truncated to 15 chars) for kernel threads where cmdline is empty.
+/// Parse `/proc/{pid}/status`, `/proc/{pid}/comm`, and `/proc/{pid}/cmdline` into a `ProcessInfo`.
 ///
 /// Returns `None` if the process doesn't exist or the status file can't be read.
 ///
@@ -158,14 +154,11 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
     let path = proc_path(pid, "status");
     let status = std::fs::read_to_string(path.as_str()).ok()?;
     let mut ppid = 0u32;
-    let mut name = String::new();
     let mut user = String::new();
     let mut tgid = 0u32;
     for line in status.lines() {
         if let Some(val) = line.strip_prefix("PPid:") {
             ppid = val.trim().parse().unwrap_or(0);
-        } else if let Some(val) = line.strip_prefix("Name:") {
-            name = val.trim().to_string();
         } else if let Some(val) = line.strip_prefix("Uid:") {
             if let Some(uid_str) = val.split_whitespace().next()
                 && let Ok(uid) = uid_str.parse::<u32>()
@@ -178,11 +171,15 @@ pub fn parse_proc_entry(pid: u32) -> Option<crate::types::ProcessInfo> {
             tgid = val.trim().parse().unwrap_or(0);
         }
     }
-    // Use full cmdline (e.g. "bun /home/user/.bun/bin/pi") when available,
-    // fall back to short Name: field (e.g. "bun") for kernel threads.
-    let cmd = read_proc_cmdline(pid).unwrap_or(name);
+    // comm: binary name from /proc/{pid}/comm (truncated to 15 chars by kernel).
+    // Used for process tree matching.
+    let comm = read_proc_comm(pid).unwrap_or_else(|| UNKNOWN.to_string());
+    // cmd: full command line from /proc/{pid}/cmdline.
+    // Falls back to comm for kernel threads where cmdline is empty.
+    let cmd = read_proc_cmdline(pid).unwrap_or_else(|| comm.clone());
     let start_time_ns = read_proc_start_time_ns(pid);
     Some(crate::types::ProcessInfo::new(
+        comm,
         cmd,
         user,
         ppid,
