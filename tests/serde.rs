@@ -6,13 +6,7 @@ use proc_tree::ProcessInfo;
 
 #[test]
 fn serde_roundtrip_process_info() {
-    let info = ProcessInfo::new(
-        "bash".into(),
-        "root".into(),
-        1,
-        100,
-        1234567890,
-    );
+    let info = ProcessInfo::new("bash".into(), "root".into(), 1, 100, 1234567890);
 
     let json = serde_json::to_string(&info).unwrap();
     let parsed: ProcessInfo = serde_json::from_str(&json).unwrap();
@@ -27,13 +21,7 @@ fn serde_roundtrip_process_info() {
 
 #[test]
 fn serde_json_format() {
-    let info = ProcessInfo::new(
-        "sshd".into(),
-        "root".into(),
-        0,
-        50,
-        999,
-    );
+    let info = ProcessInfo::new("sshd".into(), "root".into(), 0, 50, 999);
 
     let json = serde_json::to_string_pretty(&info).unwrap();
     assert!(json.contains("\"cmd\""));
