@@ -164,24 +164,12 @@ pub fn handle_event(store: &impl ProcessStore, event: &ProcEvent) -> Option<Exit
         } => {
             store.insert_process(
                 *child_pid,
-                ProcessInfo::new(
-                    String::new(),
-                    String::new(),
-                    *parent_pid,
-                    0,
-                    0,
-                ),
+                ProcessInfo::new(String::new(), String::new(), *parent_pid, 0, 0),
             );
         }
         ProcEvent::Exec { pid, .. } => {
             let info = crate::proc::parse_proc_entry(*pid).unwrap_or_else(|| {
-                ProcessInfo::new(
-                    UNKNOWN.to_string(),
-                    UNKNOWN.to_string(),
-                    0,
-                    0,
-                    0,
-                )
+                ProcessInfo::new(UNKNOWN.to_string(), UNKNOWN.to_string(), 0, 0, 0)
             });
             // Keep start_time_ns from /proc, don't overwrite with event timestamp
             store.insert_process(*pid, info);
@@ -555,28 +543,16 @@ mod tests {
     #[test]
     fn display_single_node() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         assert_eq!(display(&store, 1), "init");
     }
 
     #[test]
     fn display_root_with_children() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
-        store.insert_process(
-            100,
-            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
-        );
-        store.insert_process(
-            200,
-            ProcessInfo::new("b".into(), "root".into(), 1, 200, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
+        store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
+        store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 1, 200, 0));
         let d = display(&store, 1);
         assert!(d.starts_with("init"));
         assert!(d.contains("a"));

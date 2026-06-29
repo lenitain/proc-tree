@@ -19,13 +19,7 @@ pub struct ProcessInfo {
 
 impl ProcessInfo {
     /// Create a new `ProcessInfo`.
-    pub fn new(
-        cmd: String,
-        user: String,
-        ppid: u32,
-        tgid: u32,
-        start_time_ns: u64,
-    ) -> Self {
+    pub fn new(cmd: String, user: String, ppid: u32, tgid: u32, start_time_ns: u64) -> Self {
         Self {
             cmd,
             user,

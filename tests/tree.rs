@@ -54,7 +54,11 @@ fn build_chain_current_process() {
     let my_pid = std::process::id();
     let chain = build_chain_links(&store, my_pid);
     assert!(!chain.is_empty(), "current process should have a chain");
-    assert_eq!(chain[0].pid(), my_pid, "chain should start with current PID");
+    assert_eq!(
+        chain[0].pid(),
+        my_pid,
+        "chain should start with current PID"
+    );
     // Chain should end at PID 1
     assert_eq!(chain.last().unwrap().pid(), 1, "chain should end at PID 1");
 }

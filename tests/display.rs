@@ -6,13 +6,13 @@ use helpers::TestStore;
 
 #[test]
 fn process_link_display_format() {
-    let link = ProcessLink::new(42, "bash".into(), "root".into(),);
+    let link = ProcessLink::new(42, "bash".into(), "root".into());
     assert_eq!(link.to_string(), "42|bash|root");
 }
 
 #[test]
 fn process_link_display_special_chars() {
-    let link = ProcessLink::new(1, "systemd".into(), "root".into(),);
+    let link = ProcessLink::new(1, "systemd".into(), "root".into());
     assert_eq!(link.to_string(), "1|systemd|root");
 }
 

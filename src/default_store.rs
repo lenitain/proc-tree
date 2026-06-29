@@ -223,10 +223,7 @@ mod tests {
     #[test]
     fn default_store_insert_get() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         let info = store.get_process(1).unwrap();
         assert_eq!(info.ppid(), 0);
         assert_eq!(info.cmd(), "init");
@@ -235,18 +232,12 @@ mod tests {
     #[test]
     fn default_store_ttl_expired() {
         let store = DefaultStore::new(0); // ttl=0 means no expiry
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         assert!(store.get_process(1).is_some());
 
         // With ttl=1, entry expires after 1 second
         let store = DefaultStore::new(1);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         assert!(store.get_process(1).is_some());
         std::thread::sleep(Duration::from_millis(1100));
         assert!(store.get_process(1).is_none());
@@ -255,16 +246,10 @@ mod tests {
     #[test]
     fn clone_shares_data() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         let store2 = store.clone();
         assert!(store2.get_process(1).is_some());
-        store2.insert_process(
-            2,
-            ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0,),
-        );
+        store2.insert_process(2, ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0));
         assert!(store.get_process(2).is_some());
     }
 
@@ -272,10 +257,7 @@ mod tests {
     fn len_and_contains() {
         let store = DefaultStore::new(0);
         assert_eq!(store.len(), 0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("a".into(), "u".into(), 0, 1, 0));
         assert_eq!(store.len(), 1);
         assert!(store.contains_key(1));
         assert!(!store.contains_key(999));
@@ -285,28 +267,16 @@ mod tests {
     fn is_empty_default() {
         let store = DefaultStore::new(0);
         assert!(store.is_empty());
-        store.insert_process(
-            1,
-            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("a".into(), "u".into(), 0, 1, 0));
         assert!(!store.is_empty());
     }
 
     #[test]
     fn all_pids_returns_keys() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
-        );
-        store.insert_process(
-            2,
-            ProcessInfo::new("b".into(), "u".into(), 1, 2, 0,),
-        );
-        store.insert_process(
-            3,
-            ProcessInfo::new("c".into(), "u".into(), 1, 3, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("a".into(), "u".into(), 0, 1, 0));
+        store.insert_process(2, ProcessInfo::new("b".into(), "u".into(), 1, 2, 0));
+        store.insert_process(3, ProcessInfo::new("c".into(), "u".into(), 1, 3, 0));
         let mut pids = store.all_pids();
         pids.sort();
         assert_eq!(pids, vec![1, 2, 3]);
@@ -315,10 +285,7 @@ mod tests {
     #[test]
     fn ttl_contains_key_does_not_expire() {
         let store = DefaultStore::new(1);
-        store.insert_process(
-            1,
-            ProcessInfo::new("a".into(), "u".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("a".into(), "u".into(), 0, 1, 0));
         assert!(store.contains_key(1));
         std::thread::sleep(Duration::from_millis(1100));
         // contains_key does not trigger TTL eviction
@@ -330,14 +297,8 @@ mod tests {
     #[test]
     fn remove_process() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
-        store.insert_process(
-            2,
-            ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
+        store.insert_process(2, ProcessInfo::new("bash".into(), "root".into(), 1, 2, 0));
 
         assert_eq!(store.len(), 2);
         assert!(store.contains_key(2));
@@ -351,21 +312,12 @@ mod tests {
     #[test]
     fn children_of() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
-        store.insert_process(
-            100,
-            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
-        );
-        store.insert_process(
-            200,
-            ProcessInfo::new("b".into(), "root".into(), 1, 200, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
+        store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
+        store.insert_process(200, ProcessInfo::new("b".into(), "root".into(), 1, 200, 0));
         store.insert_process(
             300,
-            ProcessInfo::new("c".into(), "root".into(), 100, 300, 0,),
+            ProcessInfo::new("c".into(), "root".into(), 100, 300, 0),
         );
 
         let mut kids = store.children_of(1);
@@ -381,17 +333,14 @@ mod tests {
     #[test]
     fn insert_ppid_change_removes_from_old_parent() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         store.insert_process(
             100,
-            ProcessInfo::new("other".into(), "root".into(), 0, 100, 0,),
+            ProcessInfo::new("other".into(), "root".into(), 0, 100, 0),
         );
         store.insert_process(
             200,
-            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0),
         );
 
         // child 200 is under parent 100
@@ -401,7 +350,7 @@ mod tests {
         // Re-parent 200 from 100 to 1
         store.insert_process(
             200,
-            ProcessInfo::new("child".into(), "root".into(), 1, 200, 0,),
+            ProcessInfo::new("child".into(), "root".into(), 1, 200, 0),
         );
 
         // 200 should be removed from old parent's index
@@ -416,19 +365,10 @@ mod tests {
     #[test]
     fn insert_same_ppid_no_duplicate() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
-        store.insert_process(
-            100,
-            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
+        store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
         // Insert same pid with same ppid again
-        store.insert_process(
-            100,
-            ProcessInfo::new("a".into(), "root".into(), 1, 100, 0,),
-        );
+        store.insert_process(100, ProcessInfo::new("a".into(), "root".into(), 1, 100, 0));
         // Should not duplicate
         assert_eq!(store.children_of(1), vec![100]);
     }
@@ -436,17 +376,14 @@ mod tests {
     #[test]
     fn remove_process_cleans_own_children_index() {
         let store = DefaultStore::new(0);
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         store.insert_process(
             100,
-            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0,),
+            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0),
         );
         store.insert_process(
             200,
-            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0),
         );
 
         assert_eq!(store.children_of(100), vec![200]);
@@ -466,17 +403,14 @@ mod tests {
     #[test]
     fn ttl_expiration_cleans_own_children_index() {
         let store = DefaultStore::new(1); // 1 second TTL
-        store.insert_process(
-            1,
-            ProcessInfo::new("init".into(), "root".into(), 0, 1, 0,),
-        );
+        store.insert_process(1, ProcessInfo::new("init".into(), "root".into(), 0, 1, 0));
         store.insert_process(
             100,
-            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0,),
+            ProcessInfo::new("parent".into(), "root".into(), 1, 100, 0),
         );
         store.insert_process(
             200,
-            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0,),
+            ProcessInfo::new("child".into(), "root".into(), 100, 200, 0),
         );
 
         assert_eq!(store.children_of(100), vec![200]);

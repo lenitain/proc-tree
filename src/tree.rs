@@ -129,21 +129,13 @@ mod tests {
 
     #[test]
     fn process_link_display_format() {
-        let link = ProcessLink::new(
-            42,
-            "bash".into(),
-            "root".into(),
-        );
+        let link = ProcessLink::new(42, "bash".into(), "root".into());
         assert_eq!(link.to_string(), "42|bash|root");
     }
 
     #[test]
     fn process_link_clone() {
-        let link = ProcessLink::new(
-            1,
-            "init".into(),
-            "root".into(),
-        );
+        let link = ProcessLink::new(1, "init".into(), "root".into());
         let link2 = link.clone();
         assert_eq!(link.pid(), link2.pid());
         assert_eq!(link.cmd(), link2.cmd());
