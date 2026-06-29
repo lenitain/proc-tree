@@ -112,7 +112,7 @@ fn is_descendant_current_of_init() {
     // Every process is a descendant of init/systemd
     let info = resolve(&store, 1).unwrap();
     assert!(
-        is_descendant(&store, my_pid, &info.cmd()),
+        is_descendant(&store, my_pid, info.cmd()),
         "current process should be descendant of PID 1 ({})",
         info.cmd()
     );
@@ -169,7 +169,7 @@ fn find_by_cmd_init() {
     let store = TestStore::default();
     let _ = snapshot(&store);
     let info = resolve(&store, 1).unwrap();
-    let found = find_by_cmd(&store, &info.cmd());
+    let found = find_by_cmd(&store, info.cmd());
     assert!(found.contains(&1), "should find PID 1 by its cmd");
 }
 
