@@ -21,7 +21,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-proc-tree = "0.3.0"
+proc-tree = "0.4.0"
 ```
 
 ### Requirements
@@ -44,4 +44,13 @@ println!("PID 1: {} ({})", info.cmd(), info.user());
 
 // Render pstree-style tree
 println!("{}", display(&store, 1));
+```
+
+### Serde support
+
+Enable the `serde` feature to serialize/deserialize `ProcessInfo`:
+
+```toml
+[dependencies]
+proc-tree = { version = "0.4.0", features = ["serde"] }
 ```
